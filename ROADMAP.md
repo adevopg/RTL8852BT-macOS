@@ -76,6 +76,17 @@ Dos avisos aparecieron y ya estan corregidos: `rtw89_compat.h` redefinia `min`/`
 que `IOLib.h` ya define, y `IOPCIDevice` esta marcado deprecated a favor de PCIDriverKit
 (que es para DriverKit en espacio de usuario, no para kexts, asi que el aviso se silencia).
 
+**Aviso benigno que veras siempre.** El enlazador dice:
+
+```
+ld: warning: object file (libkmod.a(c_start.o)) was built for newer 'macOS'
+version (26.5) than being linked (10.15)
+```
+
+Es porque el Makefile usa `MINVER = 10.15` para que el kext valga tambien en macOS
+antiguos, mientras que el SDK del runner es 26.5. No afecta a la carga del kext.
+Si algun dia solo te interesa Tahoe, sube `MINVER` en `kext/Makefile` y desaparece.
+
 **Leccion cara que ya esta resuelta:** el kext compilaba y enlazaba sin `kmod_info`
 ni `_realmain`, que son el punto de entrada del modulo. Xcode los genera solo; compilando
 a mano hay que escribirlos (`kext/src/kmod_info.cpp`). Sin ellos `kextload` habria

@@ -1,0 +1,107 @@
+name: build-kext
+
+# Compila RTL8852BT.kext en un runner de macOS de GitHub, que trae Xcode.
+# Esto sustituye a tener un Mac o una VM: es el bucle de compilacion del proyecto.
+#
+# Disparadores: cada push, cada pull request y a mano desde la pestana Actions.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Verificaciones que no necesitan compilador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar el firmware (tools/parse_fw.py)
+        run: python3 tools/parse_fw.py
+
+      - name: Descargar el driver Linux de referencia
+        run: bash tools/fetch_reference.sh
+
+      - name: Verificar el mapa de registros contra el driver Linux
+        run: python3 tools/verify_regs.py
+
+  build:
+    name: Compilar el kext en macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Entorno
+        run: |
+          sw_vers
+          xcodebuild -version
+          echo "SDK: $(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDK version: $(xcrun --sdk macosx --show-sdk-version)"
+
+      - name: Comprobar que Kernel.framework existe en el SDK
+        run: |
+          SDK=$(xcrun --sdk macosx --show-sdk-path)
+          KH="$SDK/System/Library/Frameworks/Kernel.framework/Headers"
+          echo "Buscando $KH"
+          test -d "$KH" || { echo "FALTA Kernel.framework en el SDK"; exit 1; }
+          ls "$KH" | head -20
+          echo "--- bibliotecas de kext disponibles ---"
+          ls "$SDK/usr/lib" | grep -iE 'kmod|cc_kext' || echo "(ninguna encontrada en el SDK)"
+
+      - name: Compilar
+        id: make
+        run: |
+          cd kext
+          make 2>&1 | tee ../build.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Diagnostico si algo fallo
+        if: failure()
+        run: |
+          echo "===== build.log ====="
+          cat build.log || true
+          echo "===== flags efectivos ====="
+          SDK=$(xcrun --sdk macosx --show-sdk-path)
+          echo "SDK=$SDK"
+          echo "--- prueba minima de compilacion de un kext ---"
+          cat > /tmp/probe.cpp <<'EOF'
+          #include <IOKit/IOService.h>
+          #include <IOKit/IOLib.h>
+          class Probe : public IOService { OSDeclareDefaultStructors(Probe) };
+          OSDefineMetaClassAndStructors(Probe, IOService)
+          EOF
+          xcrun clang++ -arch x86_64 -mkernel -fno-builtin -fno-rtti -fno-exceptions \
+            -fno-common -fapple-kext -std=gnu++17 \
+            -isysroot "$SDK" \
+            -isystem "$SDK/System/Library/Frameworks/Kernel.framework/Headers" \
+            -c /tmp/probe.cpp -o /tmp/probe.o \
+            && echo "La prueba minima COMPILA: el fallo esta en nuestro codigo, no en el entorno." \
+            || echo "La prueba minima NO compila: el problema son los flags o el SDK."
+
+      - name: Informacion del kext construido
+        run: |
+          KEXT=kext/build/RTL8852BT.kext
+          ls -lR "$KEXT"
+          echo "--- dependencias reales ---"
+          kextlibs -xml "$KEXT" || true
+          echo "--- simbolos sin resolver ---"
+          nm -u "$KEXT/Contents/MacOS/RTL8852BT" | head -40 || true
+          echo "--- arquitectura ---"
+          file "$KEXT/Contents/MacOS/RTL8852BT"
+
+      - name: Publicar el kext como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: RTL8852BT.kext
+          path: kext/build/RTL8852BT.kext
+          if-no-files-found: error
+
+      - name: Publicar el log de compilacion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore

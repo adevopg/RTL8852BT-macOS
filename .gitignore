@@ -1,0 +1,16 @@
+# Driver Linux de referencia: 11 MB de codigo del kernel.
+# No se guarda aqui; se descarga con  sh tools/fetch_reference.sh
+reference/
+
+# Salida del grafo de conocimiento (regenerable con /graphify)
+graphify-out/
+
+# Artefactos de compilacion
+kext/build/
+*.o
+*.dSYM/
+
+# Basura del sistema
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -92,13 +92,13 @@ jobs:
           nm -u "$KEXT/Contents/MacOS/RTL8852BT" > /tmp/undef.txt
           echo "total sin resolver: $(wc -l < /tmp/undef.txt)"
           echo "--- ajenos al kernel (cualquier linea aqui es un fallo real) ---"
-          grep -vE '^_(IO|OS|kern|panic|mach|copy|bcopy|bzero|memcpy|memset|strl|snprintf|vsnprintf)|^__Z.*(IO|OS)[A-Z]|^_g?IO|^___stack_chk' /tmp/undef.txt > /tmp/foreign.txt || true
+          grep -vE '^_(IO|OS|kern|panic|mach|copy|bcopy|bzero|mem(cpy|set|move|cmp)|str|sn?printf|vsnprintf|kprintf|current_task|lck_|thread_|clock_|kalloc|kfree)|^__Z.*(IO|OS)[A-Z]|^_g?IO|^___stack_chk' /tmp/undef.txt > /tmp/foreign.txt || true
           cat /tmp/foreign.txt
           if [ -s /tmp/foreign.txt ]; then
-            echo "AVISO: hay simbolos que el kernel no exporta. Revisar."
-          else
-            echo "OK: todos los simbolos sin resolver los aporta el kernel."
+            echo "FALLO: hay simbolos que el kernel no exporta; kextload rechazaria el kext."
+            exit 1
           fi
+          echo "OK: todos los simbolos sin resolver los aporta el kernel."
 
       - name: Empaquetar
         run: |

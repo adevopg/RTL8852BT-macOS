@@ -34,11 +34,20 @@ hay que hablar con `IO80211Family`, que es cerrado. La via realista es implement
 
 ---
 
-## 1. Requisito previo: entorno de compilacion (hazlo primero)
+## 1. Entorno de compilacion
 
-Sin esto las fases siguientes no se pueden ni probar.
+### Opcion A (la que usa este repositorio): GitHub Actions, sin Mac
 
-### Opcion A (recomendada): macOS en maquina virtual sobre tu Windows
+`.github/workflows/build.yml` compila el kext en un runner macOS en cada push y publica
+el binario en la release `ultimo-build`. **Ya funciona.** No necesitas nada instalado:
+descargas el .tar.gz de Releases y lo inyectas en el USB.
+
+Ademas el workflow valida el firmware y comprueba que el mapa de registros sigue siendo
+fiel al driver Linux, asi que una transcripcion mal copiada se detecta sola.
+
+### Opcion B: macOS en maquina virtual sobre tu Windows
+
+Util si quieres iterar rapido sin esperar a CI, o depurar con lldb.
 
 ```
 VMware Workstation Pro + unlocker, o QEMU/KVM
@@ -48,25 +57,29 @@ Instalar Xcode desde la App Store, luego:  xcode-select --install
 
 Tu Ryzen AI 7 350 con 32 GB va sobrado. Sin aceleracion grafica, pero para compilar sobra.
 
-### Opcion B: un Mac de segunda mano
+### Opcion C: un Mac de segunda mano
 
-Un Mac mini Intel o M-series. Compila mas rapido y sirve para comparar comportamiento.
+### Estado verificado el 18/09/2026
 
-### Verificacion del entorno
+La primera compilacion en CI salio bien a la primera:
 
-```sh
-cd kext && make
+```
+Runner:  macOS 26.6.2, imagen macos-26-arm64
+Xcode:   26.6, SDK MacOSX26.5
+Salida:  Mach-O 64-bit kext bundle x86_64
 ```
 
-**Criterio de aceptacion:** `build/RTL8852BT.kext` existe y `kextlibs -xml build/RTL8852BT.kext`
-no reporta dependencias sin resolver.
+El runner es Apple Silicon y el kext sale x86_64: es compilacion cruzada, que es
+exactamente lo que hace falta para tu portatil AMD.
 
-Espera errores de compilacion la primera vez. El codigo de fases 1 y 2a esta escrito pero
-**nunca se ha compilado**. Los fallos probables:
-- `IODelay`/`IOSleep` necesitan `<IOKit/IOLib.h>` (ya incluido).
-- `FIELD_PREP` con `__builtin_ffsll` sobre `u32`: si clang se queja, castea a `u64`.
-- `memcpy` en kernel: si falta, usa `bcopy` o `__builtin_memcpy`.
-- Orden de includes en `rtw89_compat.h` frente a los headers de XNU.
+Dos avisos aparecieron y ya estan corregidos: `rtw89_compat.h` redefinia `min`/`max`
+que `IOLib.h` ya define, y `IOPCIDevice` esta marcado deprecated a favor de PCIDriverKit
+(que es para DriverKit en espacio de usuario, no para kexts, asi que el aviso se silencia).
+
+**No te fies de `kextlibs`.** Al compilar cruzado desde Apple Silicon reporta 298 simbolos
+no encontrados, porque compara contra los kexts arm64 del sistema. El criterio correcto es
+el que aplica ahora el workflow: que los simbolos sin resolver sean todos del kernel
+(`_IOLog`, `_IOMalloc`, `OSMetaClass::...`), cosa normal en cualquier kext, y ninguno ajeno.
 
 ---
 
@@ -110,7 +123,7 @@ ultimas 20 lineas: contienen el panic o el ultimo registro leido.
 
 ---
 
-## 3. FASE 1 — Handshake con el chip (ESCRITA, sin compilar)
+## 3. FASE 1 — Handshake con el chip (COMPILA, sin probar)
 
 **Archivos:** `kext/src/RTL8852BT.{hpp,cpp}`, `rtw89_compat.h`, `rtw89_fw_hdr.h`, `Info.plist`
 
@@ -143,7 +156,7 @@ un error mio en la numeracion de tipos de firmware (NORMAL es 1, no 0).
 
 ## 4. FASE 2 — Encender el MAC y cargar el firmware
 
-### 4.1 FASE 2a — Secuencia de encendido (ESCRITA, sin compilar)
+### 4.1 FASE 2a — Secuencia de encendido (COMPILA, sin probar)
 
 **Archivos:** `kext/src/RTL8852BT_power.cpp`, `rtw89_regs.h`
 
@@ -309,7 +322,8 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     Fase 0   identificacion del chip y fuentes
 [HECHO]     Fase 1   attach PCI, BAR2, version, validacion de firmware
 [HECHO]     Fase 2a  encendido del MAC + xtal_si
-[AHORA]     ---- montar macOS en VM y COMPILAR lo escrito ----
+[HECHO]     CI en GitHub Actions: compila el kext sin necesidad de Mac
+[AHORA]     ---- PROBAR el kext en el portatil con el USB de OpenCore ----
 [SIGUIENTE] Fase 2b  anillos DMA + interrupciones      (pci.c)
             Fase 2c  efuse: MAC address                 (efuse.c)
             Fase 2d  descarga de firmware al chip       (fw.c)   <- hito clave

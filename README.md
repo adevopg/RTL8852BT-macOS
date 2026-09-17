@@ -4,8 +4,16 @@ Proyecto iniciado el 18/09/2026 para el HP OmniBook 7 Aero 13-bg1xxx.
 
 ## Estado real: FASES 1 y 2a COMPILAN. Sin probar en hardware. NO DA WIFI TODAVIA.
 
-El kext compila y enlaza limpio en CI (macOS 26, Xcode 26.6, salida Mach-O x86_64).
-Lo que **no** se ha hecho todavia: cargarlo en el portatil y ver si el chip responde.
+El kext compila y enlaza limpio en CI y **el binario esta listo para descargar**:
+[Releases > ultimo-build](../../releases/tag/ultimo-build).
+
+```
+Runner:  macOS 26.6.2 (macos-26-arm64)      Xcode: 26.6, SDK MacOSX26.5
+Salida:  Mach-O 64-bit kext bundle x86_64   296 simbolos sin resolver, todos del kernel
+```
+
+Lo que **no** se ha hecho: cargarlo en el portatil y ver si el chip responde.
+Ese es el siguiente paso y necesita tu hardware.
 
 **Lee [ROADMAP.md](ROADMAP.md): es el guion completo hasta el 100%, fase a fase,
 con criterio de aceptacion y como verificar cada una bajo OpenCore.**

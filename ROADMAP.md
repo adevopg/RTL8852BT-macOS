@@ -76,6 +76,13 @@ Dos avisos aparecieron y ya estan corregidos: `rtw89_compat.h` redefinia `min`/`
 que `IOLib.h` ya define, y `IOPCIDevice` esta marcado deprecated a favor de PCIDriverKit
 (que es para DriverKit en espacio de usuario, no para kexts, asi que el aviso se silencia).
 
+**Leccion cara que ya esta resuelta:** el kext compilaba y enlazaba sin `kmod_info`
+ni `_realmain`, que son el punto de entrada del modulo. Xcode los genera solo; compilando
+a mano hay que escribirlos (`kext/src/kmod_info.cpp`). Sin ellos `kextload` habria
+rechazado el kext y el fallo solo se habria visto al arrancar el portatil. Lo detecto el
+paso de CI que separa los simbolos sin resolver; por eso ese paso ahora **falla el build**
+si aparece cualquier simbolo que el kernel no exporte.
+
 **No te fies de `kextlibs`.** Al compilar cruzado desde Apple Silicon reporta 298 simbolos
 no encontrados, porque compara contra los kexts arm64 del sistema. El criterio correcto es
 el que aplica ahora el workflow: que los simbolos sin resolver sean todos del kernel

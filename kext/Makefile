@@ -19,7 +19,7 @@ OBJS     := $(patsubst src/%.cpp,$(BUILD)/%.o,$(SRCS))
 CXX      := xcrun clang++
 CXXFLAGS := -arch $(ARCH) -mmacosx-version-min=$(MINVER) \
             -mkernel -fno-builtin -fno-rtti -fno-exceptions -fno-common \
-            -fapple-kext -std=gnu++17 -Wall -Wextra -Wno-unused-parameter \
+            -fapple-kext -std=gnu++17 -Wall -Wextra -Wno-unused-parameter             -Wno-deprecated-declarations \
             -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
             -isysroot $(SDK) -isystem $(KHDRS) -Isrc -I../reference/rtw89-linux
 LDFLAGS  := -arch $(ARCH) -mmacosx-version-min=$(MINVER) -isysroot $(SDK) \

@@ -11,11 +11,9 @@
 #include <IOKit/IOService.h>
 /* IOPCIDevice esta marcado deprecated a favor de PCIDriverKit, pero PCIDriverKit
  * es para DriverKit (espacio de usuario), no para kexts. Para un driver de kernel
- * IOPCIDevice sigue siendo la API correcta, asi que silenciamos el aviso. */
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+ * IOPCIDevice sigue siendo la API correcta. El aviso se silencia en el Makefile
+ * con -Wno-deprecated-declarations. */
 #include <IOKit/pci/IOPCIDevice.h>
-#pragma clang diagnostic pop
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOLib.h>
 #include <libkern/OSKextLib.h>
@@ -85,10 +83,7 @@ private:
 	bool parseFirmware(const u8 *fw, u32 len);
 	bool parseSingleFirmware(const u8 *fw, u32 len, rtw89_fw_bin_summary *out);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 	IOPCIDevice   *fPci    = nullptr;
-#pragma clang diagnostic pop
 	IOMemoryMap   *fBarMap = nullptr;
 	volatile u8   *fMmio   = nullptr;
 	u32            fMmioLen = 0;

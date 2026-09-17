@@ -30,6 +30,8 @@ jobs:
   build:
     name: Compilar el kext en macOS
     runs-on: macos-latest
+    permissions:
+      contents: write      # necesario para publicar la Release con el kext
     steps:
       - uses: actions/checkout@v4
 
@@ -39,69 +41,124 @@ jobs:
           xcodebuild -version
           echo "SDK: $(xcrun --sdk macosx --show-sdk-path)"
           echo "SDK version: $(xcrun --sdk macosx --show-sdk-version)"
+          echo "Arquitectura del runner: $(uname -m)"
 
       - name: Comprobar que Kernel.framework existe en el SDK
         run: |
           SDK=$(xcrun --sdk macosx --show-sdk-path)
           KH="$SDK/System/Library/Frameworks/Kernel.framework/Headers"
-          echo "Buscando $KH"
           test -d "$KH" || { echo "FALTA Kernel.framework en el SDK"; exit 1; }
-          ls "$KH" | head -20
-          echo "--- bibliotecas de kext disponibles ---"
-          ls "$SDK/usr/lib" | grep -iE 'kmod|cc_kext' || echo "(ninguna encontrada en el SDK)"
+          echo "OK: $KH"
+          echo "--- bibliotecas de kext en el SDK ---"
+          ls "$SDK/usr/lib" | grep -iE 'kmod|cc_kext' || echo "(ninguna)"
 
       - name: Compilar
-        id: make
         run: |
           cd kext
+          set -o pipefail
           make 2>&1 | tee ../build.log
-          exit ${PIPESTATUS[0]}
 
-      - name: Diagnostico si algo fallo
+      - name: Diagnostico si la compilacion fallo
         if: failure()
         run: |
           echo "===== build.log ====="
           cat build.log || true
-          echo "===== flags efectivos ====="
+          echo "===== prueba minima de kext ====="
           SDK=$(xcrun --sdk macosx --show-sdk-path)
-          echo "SDK=$SDK"
-          echo "--- prueba minima de compilacion de un kext ---"
-          cat > /tmp/probe.cpp <<'EOF'
-          #include <IOKit/IOService.h>
-          #include <IOKit/IOLib.h>
-          class Probe : public IOService { OSDeclareDefaultStructors(Probe) };
-          OSDefineMetaClassAndStructors(Probe, IOService)
-          EOF
-          xcrun clang++ -arch x86_64 -mkernel -fno-builtin -fno-rtti -fno-exceptions \
-            -fno-common -fapple-kext -std=gnu++17 \
-            -isysroot "$SDK" \
-            -isystem "$SDK/System/Library/Frameworks/Kernel.framework/Headers" \
-            -c /tmp/probe.cpp -o /tmp/probe.o \
-            && echo "La prueba minima COMPILA: el fallo esta en nuestro codigo, no en el entorno." \
-            || echo "La prueba minima NO compila: el problema son los flags o el SDK."
+          printf '%s\n' \
+            '#include <IOKit/IOService.h>' \
+            '#include <IOKit/IOLib.h>' \
+            'class Probe : public IOService { OSDeclareDefaultStructors(Probe) };' \
+            'OSDefineMetaClassAndStructors(Probe, IOService)' > /tmp/probe.cpp
+          if xcrun clang++ -arch x86_64 -mkernel -fno-builtin -fno-rtti -fno-exceptions \
+               -fno-common -fapple-kext -std=gnu++17 -isysroot "$SDK" \
+               -isystem "$SDK/System/Library/Frameworks/Kernel.framework/Headers" \
+               -c /tmp/probe.cpp -o /tmp/probe.o; then
+            echo "La prueba minima COMPILA: el fallo esta en NUESTRO codigo."
+          else
+            echo "La prueba minima NO compila: el problema son los flags o el SDK."
+          fi
 
-      - name: Informacion del kext construido
+      - name: Revisar el kext construido
         run: |
           KEXT=kext/build/RTL8852BT.kext
           ls -lR "$KEXT"
-          echo "--- dependencias reales ---"
-          kextlibs -xml "$KEXT" || true
-          echo "--- simbolos sin resolver ---"
-          nm -u "$KEXT/Contents/MacOS/RTL8852BT" | head -40 || true
           echo "--- arquitectura ---"
           file "$KEXT/Contents/MacOS/RTL8852BT"
+          echo "--- simbolos sin resolver ---"
+          # Un kext NUNCA enlaza IOKit estaticamente: el kernel resuelve estos
+          # simbolos al cargar, segun OSBundleLibraries del Info.plist. Lo unico
+          # preocupante seria un simbolo que no venga del kernel.
+          nm -u "$KEXT/Contents/MacOS/RTL8852BT" > /tmp/undef.txt
+          echo "total sin resolver: $(wc -l < /tmp/undef.txt)"
+          echo "--- ajenos al kernel (cualquier linea aqui es un fallo real) ---"
+          grep -vE '^_(IO|OS|kern|panic|mach|copy|bcopy|bzero|memcpy|memset|strl|snprintf|vsnprintf)|^__Z.*(IO|OS)[A-Z]|^_g?IO|^___stack_chk' /tmp/undef.txt > /tmp/foreign.txt || true
+          cat /tmp/foreign.txt
+          if [ -s /tmp/foreign.txt ]; then
+            echo "AVISO: hay simbolos que el kernel no exporta. Revisar."
+          else
+            echo "OK: todos los simbolos sin resolver los aporta el kernel."
+          fi
 
-      - name: Publicar el kext como artefacto descargable
+      - name: Empaquetar
+        run: |
+          cd kext/build
+          tar czf "$GITHUB_WORKSPACE/RTL8852BT.kext.tar.gz" RTL8852BT.kext
+          cd "$GITHUB_WORKSPACE"
+          ls -lh RTL8852BT.kext.tar.gz
+          shasum -a 256 RTL8852BT.kext.tar.gz
+
+      # Entrega por Release, no por artefacto: los artefactos consumen la cuota
+      # de almacenamiento de Actions de la cuenta, que ya estaba llena.
+      # La etiqueta es fija y se sobreescribe en cada compilacion de main.
+      - name: Publicar en la Release 'ultimo-build'
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHORT="${GITHUB_SHA:0:7}"
+          FECHA="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          cat > /tmp/notes.md <<NOTES
+          Compilado automaticamente desde \`$SHORT\` el $FECHA.
+
+          **Esto compila y enlaza, pero NUNCA se ha probado en el hardware.**
+
+          Instalacion:
+
+          \`\`\`sh
+          tar xzf RTL8852BT.kext.tar.gz
+          python tools/install_to_opencore.py <ruta-al-USB>/EFI --kext RTL8852BT.kext
+          \`\`\`
+
+          Despues, arranca el HP desde el USB y mira el log:
+
+          \`\`\`sh
+          log show --last 10m --predicate 'eventMessage CONTAINS "RTL8852BT"' --style compact
+          \`\`\`
+          NOTES
+          gh release delete ultimo-build --yes --cleanup-tag 2>/dev/null || true
+          gh release create ultimo-build RTL8852BT.kext.tar.gz \
+            --title "Ultimo kext compilado ($SHORT)" \
+            --notes-file /tmp/notes.md
+          echo "Release publicada:"
+          gh release view ultimo-build --json url,assets -q '.url, (.assets[]|.name + " " + (.size|tostring) + " bytes")'
+
+      # Se intenta igualmente, pero sin bloquear: si la cuota esta llena, se ignora.
+      - name: Artefacto (opcional, puede fallar por cuota)
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: RTL8852BT.kext
           path: kext/build/RTL8852BT.kext
-          if-no-files-found: error
+          retention-days: 7
+          if-no-files-found: warn
 
-      - name: Publicar el log de compilacion
+      - name: Log de compilacion (opcional)
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
+          retention-days: 7
           if-no-files-found: ignore

@@ -21,8 +21,11 @@ El grafo de conocimiento del proyecto (`graphify-out/graph.html`) confirma la di
 `rtw89_debug()` toca 60 comunidades distintas y `rtw89_phy_write32_mask()` tiene 430 aristas.
 No hay modulos aislados que portar por separado; todo esta acoplado por el acceso a registros.
 
-**Bloqueo duro nº1: necesitas un macOS para compilar.** No existe forma de compilar un kext
-en Windows. Kernel.framework solo viene con Xcode. Esto no se puede sortear.
+**Bloqueo nº1 (RESUELTO): compilar sin Mac.** Los runners macOS de GitHub Actions traen
+Xcode. `.github/workflows/build.yml` compila el kext en cada push y publica el binario en
+la release `ultimo-build`. Ya no hace falta ni un Mac ni una VM para compilar.
+Confirmado el 18/09/2026: compila limpio en macOS 26 con Xcode 26.6, salida Mach-O x86_64.
+Sigues necesitando el portatil para PROBARLO, pero eso ya lo tienes.
 
 **Bloqueo duro nº2: el enfoque solo-kext no llega al 100%.** Un kext propio puede encender el
 chip y mover paquetes, pero para que aparezca en Ajustes > Wi-Fi con escaneo de redes y WPA3
@@ -360,8 +363,9 @@ Se honesto contigo mismo sobre que esta probado:
 | Firmware `rtw8852bt_fw.bin` | **Descargado y verificado**, 928.714 bytes, v0.29.122.2 |
 | `reference/rtw89-linux/` | **Completo**, commit b5a051f del 17/09/2026 |
 | Registros en `rtw89_regs.h` | **Copiados literalmente** de reg.h y mac.h, uno a uno |
-| `RTL8852BT.cpp` fase 1 | Escrito, **nunca compilado** |
-| `RTL8852BT_power.cpp` fase 2a | Escrito, **nunca compilado, nunca ejecutado en el chip** |
+| `RTL8852BT.cpp` fase 1 | **Compila y enlaza** en CI. Nunca ejecutado |
+| `RTL8852BT_power.cpp` fase 2a | **Compila y enlaza** en CI. Nunca ejecutado en el chip |
+| CI en GitHub Actions | **Funciona**: macOS 26, Xcode 26.6, Mach-O x86_64 |
 | Fases 2b a 5 | **No escritas** |
 
 Nada de lo que hay en `kext/` ha tocado hardware real todavia. El primer paso del guion

@@ -75,8 +75,13 @@ static inline u16 le16_get_bits(__le16 v, u16 mask) { return (u16)FIELD_GET(mask
 
 /* ---- misc --------------------------------------------------------------- */
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+/* IOLib.h ya define min/max en el kernel; solo los ponemos si faltan. */
+#ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef max
 #define max(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 /* Constantes propias del driver que necesitamos en fase 1 */
 #define RTW89_MFW_SIG   0xFF

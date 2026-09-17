@@ -37,8 +37,13 @@ $(KEXT): $(OBJS) Info.plist ../firmware/rtw8852bt_fw.bin
 	$(CXX) $(LDFLAGS) $(OBJS) -o $(KEXT)/Contents/MacOS/$(NAME)
 	cp Info.plist $(KEXT)/Contents/
 	cp ../firmware/rtw8852bt_fw.bin $(KEXT)/Contents/Resources/
-	@echo "--- kextlibs (dependencias reales) ---"
-	-kextlibs -xml $(KEXT)
+	@echo "--- arquitectura del binario ---"
+	@file $(KEXT)/Contents/MacOS/$(NAME)
+	@echo "Nota: 'kextlibs' solo funciona si la arquitectura del kext coincide con"
+	@echo "      la del Mac que compila. Al cruzar a x86_64 desde Apple Silicon"
+	@echo "      reporta cientos de simbolos no encontrados; es esperable y no"
+	@echo "      indica un problema. Los simbolos de IOKit los resuelve el kernel"
+	@echo "      al cargar, segun OSBundleLibraries del Info.plist."
 	@echo "Listo: $(KEXT)"
 
 clean:

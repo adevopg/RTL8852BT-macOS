@@ -2,7 +2,10 @@
 
 Proyecto iniciado el 18/09/2026 para el HP OmniBook 7 Aero 13-bg1xxx.
 
-## Estado real: FASES 1 y 2a ESCRITAS, sin compilar. NO DA WIFI TODAVIA.
+## Estado real: FASES 1 y 2a COMPILAN. Sin probar en hardware. NO DA WIFI TODAVIA.
+
+El kext compila y enlaza limpio en CI (macOS 26, Xcode 26.6, salida Mach-O x86_64).
+Lo que **no** se ha hecho todavia: cargarlo en el portatil y ver si el chip responde.
 
 **Lee [ROADMAP.md](ROADMAP.md): es el guion completo hasta el 100%, fase a fase,
 con criterio de aceptacion y como verificar cada una bajo OpenCore.**
@@ -65,12 +68,12 @@ RTL8852BT-macOS/
 Cada push dispara el workflow `.github/workflows/build.yml`, que compila el kext en un
 runner **macOS** de GitHub con Xcode ya instalado. No hace falta ni un Mac ni una VM.
 
-1. Ve a la pestana **Actions** del repositorio.
-2. Abre la ejecucion mas reciente de `build-kext`.
-3. Si el job `Compilar el kext en macOS` esta en verde, descarga el artefacto
-   **RTL8852BT.kext** desde la parte inferior de la pagina.
-4. Si esta en rojo, el paso *Diagnostico si algo fallo* dice si el problema es
-   nuestro codigo o el entorno, y el artefacto **build-log** trae la salida completa.
+1. Ve a la pestana **Releases** y descarga `RTL8852BT.kext.tar.gz` de la release
+   **ultimo-build**, que se regenera en cada push a `main`.
+2. Si prefieres ver el detalle, en **Actions** esta la ejecucion completa.
+3. Si la compilacion falla, el paso *Diagnostico si la compilacion fallo* compila
+   un kext minimo de prueba para distinguir si el problema es nuestro codigo o el
+   entorno, y deja la salida completa en el log.
 
 Tambien se puede lanzar a mano: Actions > build-kext > *Run workflow*.
 

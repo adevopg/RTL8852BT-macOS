@@ -23,6 +23,12 @@ extern "C" {
 kern_return_t RTL8852BT_kmod_start(kmod_info_t *ki, void *d);
 kern_return_t RTL8852BT_kmod_stop(kmod_info_t *ki, void *d);
 
+/* _start y _stop los aporta libkmodc++.a, pero hay que declararlos aqui para
+ * poder nombrarlos dentro de KMOD_EXPLICIT_DECL. Se encargan de ejecutar los
+ * constructores estaticos de C++ antes de saltar a _realmain. */
+extern kern_return_t _start(kmod_info_t *ki, void *data);
+extern kern_return_t _stop(kmod_info_t *ki, void *data);
+
 /* Debe coincidir con Info.plist:
  *   CFBundleIdentifier  = com.poveda.driver.RTL8852BT
  *   CFBundleVersion     = 0.1.0

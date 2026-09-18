@@ -594,7 +594,8 @@ es cambiar eso.
 | 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pantalla visible; se para en `bridgeAllocateResources` del puente raiz, tras listar los hijos (antes de `applyConfiguration`) |
 | 13 | `ResizeAppleGpuBars = 0` (la Radeon 860M tiene un BAR de 2 GB; macOS admite 1 GB como maximo) | **PCI completo. Nuestro driver se ejecuta: `RTL8852BT: init`**. NVMe y APFS cargan; se para en `ktriage_register_subsystem_strings` |
 | 14 | kext nuevo que registra cada salida de `probe`/`start` | `probe: espacio de configuracion dice ffff:ffff`: la tarjeta no responde al llegar el driver |
-| 15 | kext: diagnostico del enlace del puente + reintento 1 s + quitar ASPM/L1SS y reentrenar | pendiente |
+| 15 | kext: diagnostico del enlace del puente + reintento 1 s + quitar ASPM/L1SS y reentrenar | buses bien (sec=1), enlace **activo** Gen1 x1, ASPM L1 + L1.1/L1.2 activos por la BIOS; sigue ffff: tarjeta colgada |
+| 16 | `pci-aspm-default=0` + kext con reset del bus secundario y restauracion de BARs | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -691,3 +692,12 @@ sin `_PR0`/`_PR3`). Hipotesis: el enlace cae por ASPM L1/L1SS, problema conocido
 (en Linux rtw89 tiene `disable_aspm_l1` y `disable_aspm_l1ss`). El kext de la prueba 15
 registra el enlace del puerto de bajada y reintenta: espera 1 s y, si no vuelve, pone a 0
 ASPM y los bits de L1SS del puerto y reentrena (`LNKCTL` bit 5).
+
+**Prueba 15.** Puente `0:2.3` con `sec=1 sub=1` (numeracion correcta),
+`LNKSTA=7011` (Gen1 x1, DLLLA=1), `LNKCTL=00c2` (ASPM L1) y `L1SS=60011e0f` (los cuatro
+modos L1.x activos, tal como los dejo la BIOS). Por defecto macOS no toca ASPM: solo lo
+hace con `pci-aspm-default` o con propiedades (`IOPCIBridge.cpp`, `setDeviceASPMState`).
+Esperar 1 s y reentrenar sin ASPM no recuperan la tarjeta: esta colgada por dentro (fallo
+conocido de Realtek al salir de L1.2). Prueba 16: `pci-aspm-default=0` (macOS desactiva
+ASPM y L1SS en ambos extremos antes de publicar) y, como rescate, reset del bus secundario
+(Bridge Control bit 6) seguido de restaurar los BAR desde `getDeviceMemoryWithRegister`.

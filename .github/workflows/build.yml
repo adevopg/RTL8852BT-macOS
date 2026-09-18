@@ -202,36 +202,54 @@ jobs:
       - name: Compilar
         run: cd kext && make
 
-      - name: Que sabe hacer kmutil en esta version
-        run: |
-          echo "=== kmutil ==="
-          kmutil --help 2>&1 | head -30 || true
-          echo "=== kmutil check ==="
-          kmutil check --help 2>&1 | head -25 || true
-          echo "=== kmutil inspect ==="
-          kmutil inspect --help 2>&1 | head -25 || true
-
-      - name: kextlibs - ahora SI puede resolver los simbolos
+      - name: kmutil libraries - el sustituto moderno de kextlibs
         run: |
           KEXT=kext/build/RTL8852BT.kext
-          echo "En un Mac x86_64, kextlibs puede comparar contra los kexts del"
-          echo "sistema. Si aqui no faltan simbolos, macOS resolvera el kext."
-          kextlibs -xml "$KEXT" 2>&1 | tee /tmp/kextlibs.txt || true
+          echo "kextlibs busca en /System/Library/Extensions, que en macOS"
+          echo "moderno esta practicamente vacio: los KPI viven ahora en"
+          echo "/System/Library/KernelCollections/*.kc. Por eso decia que no"
+          echo "encontraba NINGUNO de los 296 simbolos."
+          ls /System/Library/Extensions | wc -l
+          ls /System/Library/KernelCollections/ 2>/dev/null || true
+          echo
+          echo "=== ayuda ==="
+          kmutil libraries --help 2>&1 | head -25 || true
+          echo
+          echo "=== resolucion real de simbolos ==="
+          kmutil libraries --xml -p "$KEXT" 2>&1 | tee /tmp/libs.txt | head -40 || true
           echo "===== veredicto ====="
-          if grep -qi "symbols not found" /tmp/kextlibs.txt; then
-            echo "FALTAN SIMBOLOS. Revisar OSBundleLibraries del Info.plist."
+          if grep -qiE "not found|unresolved|missing" /tmp/libs.txt; then
+            echo "Quedan simbolos sin resolver. Revisar OSBundleLibraries."
+          elif grep -q "com.apple.kpi" /tmp/libs.txt; then
+            echo "RESUELTO: kmutil encuentra las librerias que necesita el kext."
           else
-            echo "Sin simbolos huerfanos: las dependencias declaradas bastan."
+            echo "Salida inesperada, revisar arriba."
           fi
 
-      - name: kmutil - validacion del bundle
+      - name: kmutil create - enlazar el kext de verdad (prueba definitiva)
         run: |
           KEXT=kext/build/RTL8852BT.kext
-          echo "=== inspect ==="
-          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -40 || true
-          echo "=== check ==="
-          kmutil check --bundle-path "$KEXT" 2>&1 | head -20 || true
-          echo "=== load en seco (fallara por SIP, pero dice POR QUE) ==="
-          # Con SIP activo no puede cargar, pero el mensaje distingue entre
-          # 'kext invalido' y 'politica de seguridad', que es lo que interesa.
-          sudo kmutil load -p "$KEXT" 2>&1 | head -25 || true
+          echo "Si macOS puede ENLAZAR el kext dentro de una coleccion auxiliar,"
+          echo "entonces lo puede cargar. Es la comprobacion mas fuerte que hay"
+          echo "sin tener el hardware delante."
+          KERNEL=$(ls /System/Library/Kernels/kernel* 2>/dev/null | head -1)
+          echo "kernel: ${KERNEL:-no encontrado}"
+          set -x
+          sudo kmutil create -a x86_64 -z -n aux             --kext-path "$KEXT"             -B /tmp/aux.kc             -V release 2>&1 | tee /tmp/create.txt | head -50 || true
+          set +x
+          echo "===== veredicto ====="
+          if [ -f /tmp/aux.kc ]; then
+            echo "ENLAZADO CORRECTAMENTE. macOS puede cargar este kext."
+            ls -lh /tmp/aux.kc
+          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure" /tmp/create.txt; then
+            echo "FALLO DE ENLACE: hay simbolos que el kernel no da. Ver arriba."
+            exit 1
+          else
+            echo "No concluyente. Salida completa:"
+            cat /tmp/create.txt
+          fi
+
+      - name: Que sabe hacer kmutil en esta version
+        run: |
+          echo "=== kmutil create --help ==="
+          kmutil create --help 2>&1 | head -35 || true

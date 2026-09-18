@@ -51,12 +51,28 @@ struct rtw89_ring {
 	u32  rp       = 0;         /* indice del hardware */
 };
 
+/* Una seccion del firmware: un trozo de codigo y la direccion de la memoria
+ * interna del chip donde hay que dejarlo. */
+struct rtw89_fw_section {
+	u32 dlAddr;    /* destino dentro del chip */
+	u32 offset;    /* donde empieza dentro del fichero */
+	u32 len;
+	u8  type;
+};
+
+#define RTW89_FW_MAX_SECTIONS 16
+
 struct rtw89_fw_bin_summary {
 	u8  major, minor, sub, idx;
 	u32 commit_id;
 	u32 section_num;
 	bool dynamic_hdr;
 	u32 hdr_len;
+	u32 dynamicHdrLen;
+	u32 partSize;
+	const u8 *base;      /* inicio de este firmware dentro del fichero */
+	u32 totalLen;
+	rtw89_fw_section sections[RTW89_FW_MAX_SECTIONS];
 };
 
 class RTL8852BT : public IOService {
@@ -127,6 +143,18 @@ public:
 	u8   getFwdlStatus();
 	void write16Mask(u32 addr, u16 mask, u16 v);
 
+	/* FASE 2d-2 - enviar el firmware por H2C (RTL8852BT_h2c.cpp) */
+	bool downloadFirmware();
+	bool sendFirmwareHeader();
+	bool sendFirmwareSections();
+	bool sendH2C(const u8 *payload, u32 payloadLen, bool withHeader,
+	             u8 cat, u8 cls, u8 func, bool fwDl);
+	bool submitH2C(u32 physAddr, u32 totalLen);
+	void fillTxDesc(u8 *desc, u32 payloadLen, bool fwDl);
+	void fillH2CHeader(u8 *hdr, u8 cat, u8 cls, u8 func, u32 len);
+	bool allocH2CBuffers();
+	void freeH2CBuffers();
+
 private:
 	bool mapBar();
 	void unmapBar();
@@ -150,6 +178,12 @@ private:
 	bool fDmaReady = false;
 	bool fFwdlReady = false;
 	bool fFwReady = false;
+
+	/* FASE 2d-2 */
+	static const u32 H2C_BUF_COUNT = 4;
+	rtw89_ring fH2CBuf[H2C_BUF_COUNT];
+	u32 fH2CBufNext = 0;
+	u8  fH2CSeq = 0;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;

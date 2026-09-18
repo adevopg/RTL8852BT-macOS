@@ -105,19 +105,22 @@ bool RTL8852BT::start(IOService *provider)
 		 * callback asincrono de la fase 1, asi que puede no estar listo
 		 * todavia en el primer arranque. */
 		if (fFwValid) {
-			if (!prepareFirmwareDownload())
+			if (!prepareFirmwareDownload()) {
 				RTLOG("FASE 2d-1 FALLO: el chip no entro en modo descarga.");
-			else
+			} else {
 				fFwdlReady = true;
+				/* FASE 2d-2: el hito. Enviar el firmware de verdad. */
+				downloadFirmware();
+			}
 		} else {
 			RTLOG("FASE 2d-1 omitida: el firmware aun no estaba validado.");
 		}
 	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d. NO hay WiFi aun.",
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d fwRun=%d.",
 	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0,
-	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0);
+	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0, fFwReady ? 1 : 0);
 	return true;
 
 fail:
@@ -316,13 +319,34 @@ bool RTL8852BT::parseSingleFirmware(const u8 *fw, u32 len, rtw89_fw_bin_summary 
 		return false;
 	}
 
+	if (out->section_num > RTW89_FW_MAX_SECTIONS) {
+		RTLOG("demasiadas secciones (%u); el maximo soportado es %u",
+		      out->section_num, RTW89_FW_MAX_SECTIONS);
+		return false;
+	}
+
+	/* Anotar donde empieza cada seccion y a que direccion del chip va.
+	 * Los datos vienen uno detras de otro justo despues de la cabecera. */
 	u32 total = 0;
-	for (u32 i = 0; i < out->section_num; i++)
-		total += le32_get_bits(h->sections[i].w1, FWSECTION_HDR_W1_SEC_SIZE);
+	u32 cursor = out->hdr_len;
+	for (u32 i = 0; i < out->section_num; i++) {
+		u32 secLen = le32_get_bits(h->sections[i].w1, FWSECTION_HDR_W1_SEC_SIZE);
+		out->sections[i].dlAddr = le32_get_bits(h->sections[i].w0, FWSECTION_HDR_W0_DL_ADDR);
+		out->sections[i].type   = (u8)le32_get_bits(h->sections[i].w1, FWSECTION_HDR_W1_SECTIONTYPE);
+		out->sections[i].len    = secLen;
+		out->sections[i].offset = cursor;
+		cursor += secLen;
+		total  += secLen;
+	}
 	if (out->hdr_len + total > len) {
 		RTLOG("secciones (%u bytes) exceden el fichero (%u)", total, len);
 		return false;
 	}
+	out->base     = fw;
+	out->totalLen = len;
+	/* Chips de generacion AX: trozos fijos de 2020 bytes (fw.c:165) */
+	out->partSize = FWDL_SECTION_PER_PKT_LEN;
+	out->dynamicHdrLen = 0;   /* v0 sin cabecera dinamica; se calcula si la hay */
 
 	RTLOG("firmware rtw8852bt_fw.bin OK, v%u.%u.%u.%u commit %08x, %u sections, %u bytes de codigo",
 	      out->major, out->minor, out->sub, out->idx, out->commit_id, out->section_num, total);

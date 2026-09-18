@@ -591,7 +591,8 @@ es cambiar eso.
 | 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | **macOS reconoce los 16 hilos** (`AppleACPICPU ... Enabled`) y pasa el cuelgue; pantalla negra (normal durante la configuracion PCI) y reinicio brusco a los pocos segundos |
 | 10 | `cpus=1` (diagnostico: un solo hilo) | **panic legible**: `VoodooI2CDeviceNub::getGPIOController`, kext del panel tactil, a los 0,0039 s |
 | 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | sin panic; entra en `[ PCI configuration begin ]`, todos los rangos ACPI `added(ok)`; la pantalla se apaga (normal) |
-| 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pendiente |
+| 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pantalla visible; se para en `bridgeAllocateResources` del puente raiz, tras listar los hijos (antes de `applyConfiguration`) |
+| 13 | `ResizeAppleGpuBars = 0` (la Radeon 860M tiene un BAR de 2 GB; macOS admite 1 GB como maximo) | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -662,3 +663,13 @@ pantalla hasta terminar, y lo que pase ahi no se ve.
 call [rcx+0x8f0] (setConsoleInfo)`. Patron unico en todo el KC. Se cambia el 7 por un 6
 (`kPEEnableScreen`) con un `Kernel > Patch` de OpenCore sobre `com.apple.iokit.IOPCIFamily`,
 base `__ZN17IOPCIConfigurator9configureEj`. Se quita cuando macOS arranque.
+
+**Prueba 12.** Con la pantalla encendida se ve toda la configuracion PCI: escaneo,
+reparto de buses y `iterate allocate: start`. Se para en
+`bridgeAllocateResources(bridge [i2]0:0:0)` tras listar los rangos de sus hijos
+(`0:2:3` WiFi, `0:2:4` NVMe, `0:8:1` grafica, `0:8:2`, `0:8:3`). Lo siguiente en el codigo
+es `applyConfiguration()` sobre cada hijo. El puente de la grafica (`0:8:1`, `1022:1110`)
+pide `PFM` de 2 GB con alineacion de 2 GB y aparece sin asignar (`0x0:0x0`). En Windows
+la Radeon 860M (`1002:1114`) tiene un BAR de 2 GB en `0x900000000` (la pantalla) y otro de
+256 MB en `0x80000000`. Segun la documentacion de OpenCore, macOS admite como maximo 1 GB
+por BAR de GPU; `ResizeAppleGpuBars = 0` es el unico valor soportado y solo afecta a macOS.

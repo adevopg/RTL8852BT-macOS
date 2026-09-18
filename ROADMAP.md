@@ -583,7 +583,13 @@ es cambiar eso.
 | 1 | configuracion inicial | el cargador de macOS falla al reservar memoria (`EB.MM.AKM`, `EB|STOP 0x16`) |
 | 2 | `DevirtualiseMmio` + OpenCore DEBUG + SSDT corregido | **entrega el control al kernel** (`EXITBS:START`) y ahi se queda |
 | 3 | `SetupVirtualMap` desactivado | **el kernel arranca** (Darwin 25.6.0) y da panic a los 0,34 s |
-| 4 | `MmioWhitelist 0x80000000` | pendiente |
+| 4 | `MmioWhitelist 0x80000000` | vuelve el fallo de memoria: `No slide values are usable!` |
+| 5 | `AllowRelocationBlock` | pendiente |
+
+**Callejon de la prueba 4:** sin la region `0x80000000` el firmware no puede leer su NVRAM
+(panic de la prueba 3); con ella, OpenCore solo libera 526 MB en vez de 2,6 GB y no queda
+ningun slide valido para el kernel. `AllowRelocationBlock` esta pensado justo para cuando
+"no existe un slide mejor". Plan B: quitar la lista blanca y usar NVRAM emulada.
 
 **Panic de la prueba 3, leido del video:** page fault en codigo del firmware al leer
 `0xFF0CC04C`, la ventana de la flash donde vive la NVRAM, que `DevirtualiseMmio` habia

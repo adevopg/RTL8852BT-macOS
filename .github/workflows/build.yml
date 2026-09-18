@@ -229,24 +229,25 @@ jobs:
       - name: kmutil create - enlazar el kext de verdad (prueba definitiva)
         run: |
           KEXT="$PWD/kext/build/RTL8852BT.kext"
-          echo "=== opciones completas de kmutil create ==="
-          kmutil create --help 2>&1 || true
-          echo
+          KC=/System/Library/KernelCollections
           echo "Si macOS puede ENLAZAR el kext en una coleccion auxiliar, lo puede"
           echo "cargar. Es la prueba mas fuerte que existe sin tener la tarjeta."
-          KC=/System/Library/KernelCollections
-          ls -l "$KC"
+          echo "Opciones correctas (de la ayuda): -A/--auxiliary-path, -p/--bundle-path,"
+          echo "-k/--kernel, -x/--explicit-only."
           echo
-          echo "=== intento: coleccion auxiliar con -p / --aux-path ==="
-          sudo kmutil create -z -a x86_64 -V release -n aux             --boot-path "$KC/BootKernelExtensions.kc"             --system-path "$KC/SystemKernelExtensions.kc"             --aux-path /tmp/aux.kc             -p "$KEXT" 2>&1 | tee /tmp/create.txt || true
+          sudo kmutil create -z -a x86_64 -V release -n aux             -k /System/Library/Kernels/kernel             -B "$KC/BootKernelExtensions.kc"             -S "$KC/SystemKernelExtensions.kc"             -A /tmp/aux.kc             -p "$KEXT"             -x 2>&1 | tee /tmp/create.txt || true
           echo
           echo "===== veredicto ====="
-          if [ -f /tmp/aux.kc ]; then
-            echo "ENLAZADO. macOS puede cargar este kext."
-            ls -lh /tmp/aux.kc
-          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure|could not resolve" /tmp/create.txt; then
-            echo "FALLO DE ENLACE: faltan simbolos de verdad. Ver arriba."
+          OUT=$(ls /tmp/aux.kc* 2>/dev/null | head -1)
+          if [ -n "$OUT" ]; then
+            echo "ENLAZADO CORRECTAMENTE. macOS puede cargar este kext."
+            ls -lh $OUT
+            echo "--- el kext esta dentro de la coleccion? ---"
+            kmutil inspect -B "$OUT" 2>&1 | grep -i rtl8852 ||               kmutil inspect --collection "$OUT" 2>&1 | grep -i rtl8852 || true
+          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure|could not resolve|unresolved" /tmp/create.txt; then
+            echo "FALLO DE ENLACE: faltan simbolos de verdad."
             exit 1
           else
-            echo "No concluyente; salida completa arriba."
+            echo "No concluyente. Salida completa:"
+            cat /tmp/create.txt
           fi

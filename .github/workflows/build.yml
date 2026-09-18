@@ -177,18 +177,13 @@ jobs:
     name: Validar el kext en macOS real
     needs: build
     continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15, macos-14, macos-latest]
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Que maquina nos ha tocado
         id: arch
         run: |
-          echo "etiqueta: ${{ matrix.runner }}"
           echo "uname -m: $(uname -m)"
           echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
           sw_vers
@@ -205,22 +200,24 @@ jobs:
           echo "--- el firmware esta dentro? ---"
           ls -l "$KEXT/Contents/Resources/"
 
-      - name: kextutil - validacion real contra el kernel
+      - name: Validacion con kmutil (lo que macOS mira al cargar)
         run: |
           KEXT=kext/build/RTL8852BT.kext
-          echo "Arquitectura del runner: $(uname -m); el kext es x86_64."
-          if [ "$(uname -m)" != "x86_64" ]; then
-            echo "Runner Apple Silicon: no hay simbolos del kernel x86_64."
-            echo "kextutil se ejecuta igualmente, pero un fallo aqui NO significa"
-            echo "que el kext este mal; solo que no se puede validar cruzado."
+          echo "Runner: $(uname -m).  El kext es x86_64."
+          echo
+          echo "=== kmutil check: estructura del bundle ==="
+          # kmutil check valida el bundle en si; no depende de la arquitectura.
+          kmutil check --bundle-path "$KEXT" 2>&1 | tee /tmp/check.txt || true
+          if [ ! -s /tmp/check.txt ]; then
+            echo "(sin salida = sin problemas; kmutil check calla cuando todo esta bien)"
           fi
-          # -n = no cargar, solo validar.  -t = informe completo de problemas.
-          sudo kextutil -n -t -arch x86_64 "$KEXT" 2>&1 | tee /tmp/kextutil.txt || true
-          echo "===== veredicto ====="
-          if grep -qi "appears to be loadable" /tmp/kextutil.txt; then
-            echo "macOS ACEPTA el kext: es cargable."
-          elif grep -qiE "no kernel file|not valid for architecture|Can.t use" /tmp/kextutil.txt; then
-            echo "No concluyente: limitacion de arquitectura del runner, no del kext."
-          else
-            echo "Revisar la salida de arriba."
-          fi
+          echo
+          echo "=== kmutil inspect: metadatos que leera el kernel ==="
+          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -30 || true
+          echo
+          echo "=== limitacion honesta ==="
+          echo "Los runners macOS de GitHub son todos Apple Silicon desde 2025."
+          echo "Resolver los 296 simbolos contra el kernel exige un macOS x86_64,"
+          echo "asi que esa comprobacion NO se puede hacer aqui. Lo que si queda"
+          echo "cubierto: estructura del bundle (kmutil + tools/verify_bundle.py) y"
+          echo "que todo simbolo sin resolver sea de los que exporta el kernel."

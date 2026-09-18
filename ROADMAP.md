@@ -381,17 +381,47 @@ El termometro es la prueba de vida. Son 6 bits, rango 0 a 63. A temperatura ambi
 tiene que dar un valor intermedio. Si los dos caminos dan 0 o 63 clavados, el bloque no
 esta alimentado, y el codigo falla ahi en vez de seguir creyendo que hay radio.
 
-### 5.2 Lo que falta de la fase 3
+### 5.2 FASE 3b — Las tablas (ESCRITA Y COMPILA)
 
-1. Init de la banda base con las tablas de `rtw8852b_table.c` (750 KB).
-2. Init de RF con las suyas.
-3. Calibraciones de `rtw8852bt_rfk.c`: DACK, ADDCK, IQK, DPK, TSSI. Son lo que permite
+**Aqui me equivocaba, y a favor.** Tenia previsto escribir un generador para convertir
+los 750 KB de `rtw8852b_table.c`, trabajo de dias. No hace falta.
+
+El 8852BT **no lleva tablas compiladas**: en `rtw8852bt.c` sus punteros `bb_table`,
+`bb_gain_table`, `rf_table` y `nctl_table` son todos NULL. Sus tablas vienen como
+*elementos* pegados al final del propio fichero de firmware, detras del contenedor
+multi-firmware. Ya las teniamos desde que descargamos `rtw8852bt_fw.bin`.
+
+Verificado con `python tools/parse_fw.py` sobre el fichero real:
+
+| Elemento | Contenido |
+|---|---|
+| BB_REG | 1.028 pares direccion/dato |
+| RADIO_A | 3.647 pares |
+| RADIO_B | 3.630 pares |
+| RF_NCTL | 1.849 pares |
+
+Mas once elementos de potencia y regulatorios para mas adelante.
+
+**Trampa que habria costado cara.** Dentro de esas tablas, las direcciones 0xf9 a 0xfe
+NO son registros: son esperas codificadas, de 1 microsegundo a 50 milisegundos.
+Tratarlas como registros escribiria basura en direcciones bajas de la PHY. Igual que el
+dato 0xbabecafe, que significa "saltate este registro". Ambas contempladas.
+
+**Criterio de aceptacion:**
+
+```
+RTL8852BT: tablas: BB_REG=1028 RADIO_A=3647 RADIO_B=3630 RF_NCTL=1849 pares
+RTL8852BT: tablas: BB_REG       idx=0  1028 pares -> N escritos, N esperas, N saltados
+   (una linea por tabla)
+RTL8852BT: FASE 3b lista: tablas de banda base y radio aplicadas.
+```
+
+### 5.3 Lo que falta de la fase 3
+
+1. Calibraciones de `rtw8852bt_rfk.c`: DACK, ADDCK, IQK, DPK, TSSI. Son lo que permite
    transmitir con la potencia correcta.
-4. Ajuste de canal y ancho de banda: `rtw8852bt_set_channel`.
-
-Las tablas son mecanicas pero enormes. Lo sensato no es copiarlas a mano sino escribir
-un generador que las convierta desde la fuente Linux, igual que `verify_regs.py`
-comprueba los registros.
+2. Ajuste de canal y ancho de banda: `rtw8852bt_set_channel`.
+3. Tablas de potencia y limites regulatorios, que tambien estan ya en el fichero.
 
 **Criterio de aceptacion:** despues del init, leer el termometro del chip
 (`rtw8852bt_get_thermal`) devuelve un valor plausible (20-60 aproximadamente), no 0 ni 0xFF.
@@ -479,8 +509,9 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     Fase 2d-1 modo descarga de firmware         (mac.c)
 [HECHO]     Fase 2d-2 enviar el firmware por H2C        (fw.c)   <- hito clave
 [HECHO]     Fase 3a  encender la radio                 (rtw8852b_common.c)
+[HECHO]     Fase 3b  tablas de BB/RF (venian en el firmware)
 [AHORA]     ---- PROBAR en el portatil ----
-[SIGUIENTE] Fase 3b  tablas de BB/RF + calibraciones    (rtw8852b_table.c, rfk)
+[SIGUIENTE] Fase 3c  calibraciones + canal              (rtw8852bt_rfk.c)
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)
             Fase 5   IO80211Family / AirportItlwm

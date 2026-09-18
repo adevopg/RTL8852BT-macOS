@@ -593,7 +593,8 @@ es cambiar eso.
 | 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | sin panic; entra en `[ PCI configuration begin ]`, todos los rangos ACPI `added(ok)`; la pantalla se apaga (normal) |
 | 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pantalla visible; se para en `bridgeAllocateResources` del puente raiz, tras listar los hijos (antes de `applyConfiguration`) |
 | 13 | `ResizeAppleGpuBars = 0` (la Radeon 860M tiene un BAR de 2 GB; macOS admite 1 GB como maximo) | **PCI completo. Nuestro driver se ejecuta: `RTL8852BT: init`**. NVMe y APFS cargan; se para en `ktriage_register_subsystem_strings` |
-| 14 | kext nuevo que registra cada salida de `probe`/`start` | pendiente |
+| 14 | kext nuevo que registra cada salida de `probe`/`start` | `probe: espacio de configuracion dice ffff:ffff`: la tarjeta no responde al llegar el driver |
+| 15 | kext: diagnostico del enlace del puente + reintento 1 s + quitar ASPM/L1SS y reentrenar | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -682,3 +683,11 @@ real por primera vez**: `RTL8852BT: init (fase 1, sin WiFi funcional)`. No sale 
 en el codigo, `probe` sale en silencio si `configRead16` no devuelve `10ec:b520`, asi que
 probablemente leyo `0xffff`. El kext de la prueba 14 registra cada salida. El arranque
 sigue hasta cargar APFS y se para en `ktriage_register_subsystem_strings`.
+
+**Prueba 14.** `probe` lee `ffff:ffff`, aunque macOS habia escaneado la tarjeta sin
+problema (`WLAN (1:0:0) published`). No es `configAccess()` de IOPCIDevice (con
+`pci_log_mode=0x2` habria impreso `config protect fail`) ni ACPI (`GPP5.WLAN._PS3` vacio,
+sin `_PR0`/`_PR3`). Hipotesis: el enlace cae por ASPM L1/L1SS, problema conocido de Realtek
+(en Linux rtw89 tiene `disable_aspm_l1` y `disable_aspm_l1ss`). El kext de la prueba 15
+registra el enlace del puerto de bajada y reintenta: espera 1 s y, si no vuelve, pone a 0
+ASPM y los bits de L1SS del puerto y reentrena (`LNKCTL` bit 5).

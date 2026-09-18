@@ -589,7 +589,8 @@ es cambiar eso.
 | 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | mismo sitio: `npci` no era la causa |
 | 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | ninguna linea `[PCIe:`: se cuelga antes de leer el puente raiz |
 | 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | **macOS reconoce los 16 hilos** (`AppleACPICPU ... Enabled`) y pasa el cuelgue; pantalla negra (normal durante la configuracion PCI) y reinicio brusco a los pocos segundos |
-| 10 | `cpus=1` (diagnostico: un solo hilo) | pendiente |
+| 10 | `cpus=1` (diagnostico: un solo hilo) | **panic legible**: `VoodooI2CDeviceNub::getGPIOController`, kext del panel tactil, a los 0,0039 s |
+| 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -639,3 +640,11 @@ entre `EXITBS:START` y el siguiente arranque de OpenCore, sin panic. Es lo esper
 falla el arranque de los nucleos secundarios en un Zen 5 hibrido (4 Zen 5 + 4 Zen 5c),
 que hasta ahora macOS no intentaba porque no veia ningun procesador.
 La prueba 10 (`cpus=1`) separa las dos hipotesis: nucleos o configuracion PCI.
+
+**Prueba 10: el reinicio era VoodooI2C.** Con un solo hilo macOS pinta el panic entero:
+page fault en `VoodooI2CDeviceNub::getGPIOController` (`com.alexandred.VoodooI2C` 2.9.1,
+dependencia `org.coolstar.VoodooGPIO`), llamado desde `VoodooI2CControllerDriver::start`.
+VoodooI2C busca un controlador GPIO que solo existe en portatiles Intel. **No es nuestro
+driver:** ocurre a los 0,0039 s de arrancar el emparejamiento de dispositivos y no aparece
+`RTL8852BT` en el backtrace. Se desactivan los cuatro kexts de VoodooI2C (son del panel
+tactil, no hacen falta para arrancar).

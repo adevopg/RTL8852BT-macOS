@@ -119,6 +119,45 @@ static void retrainWithoutAspm(IOPCIDevice *br)
 	IOSleep(100);
 }
 
+/* Ultimo recurso: reset del bus secundario desde el puerto de bajada.
+ * Prueba 15: con el enlace activo (LNKSTA DLLLA=1) y ASPM/L1SS quitados, la
+ * tarjeta seguia en ffff, o sea colgada por dentro. Un reset del bus secundario
+ * (Bridge Control bit 6) equivale a desenchufarla y enchufarla. Borra su espacio
+ * de configuracion, asi que hay que volver a escribir las direcciones (BAR) que
+ * macOS le habia asignado; IOPCIDevice las sigue guardando como IODeviceMemory. */
+#define PCI_BRIDGE_CONTROL  0x3E
+#define BRIDGE_CTL_SBR      0x0040
+
+static void restoreBars(IOPCIDevice *pci)
+{
+	for (UInt8 reg = kIOPCIConfigBaseAddress0; reg <= kIOPCIConfigBaseAddress5; reg += 4) {
+		IODeviceMemory *m = pci->getDeviceMemoryWithRegister(reg);
+		u32 cur = pci->configRead32(reg);
+		bool is64 = !(cur & 1) && ((cur & 0x6) == 0x4);
+		if (m) {
+			u64 pa = m->getPhysicalAddress();
+			pci->configWrite32(reg, (u32)pa | (cur & ((cur & 1) ? 0x3 : 0xF)));
+			if (is64)
+				pci->configWrite32((UInt8)(reg + 4), (u32)(pa >> 32));
+			RTLOG("probe: BAR en 0x%02x restaurado a 0x%llx (%s)", reg, pa, is64 ? "64 bits" : "32 bits");
+		}
+		if (is64)
+			reg += 4;
+	}
+	u16 cmd = pci->configRead16(kIOPCIConfigCommand);
+	pci->configWrite16(kIOPCIConfigCommand,
+	                   (u16)(cmd | kIOPCICommandMemorySpace | kIOPCICommandIOSpace | kIOPCICommandBusMaster));
+}
+
+static void secondaryBusReset(IOPCIDevice *br)
+{
+	u16 bctl = br->configRead16((UInt8)PCI_BRIDGE_CONTROL);
+	br->configWrite16((UInt8)PCI_BRIDGE_CONTROL, (u16)(bctl | BRIDGE_CTL_SBR));
+	IOSleep(2);                    /* la especificacion pide >= 1 ms */
+	br->configWrite16((UInt8)PCI_BRIDGE_CONTROL, (u16)(bctl & ~BRIDGE_CTL_SBR));
+	IOSleep(100);                  /* >= 100 ms antes del primer acceso */
+}
+
 IOService *RTL8852BT::probe(IOService *provider, SInt32 *score)
 {
 	/* Cada salida de probe deja rastro. En la prueba 13 (primer arranque real)
@@ -158,6 +197,17 @@ IOService *RTL8852BT::probe(IOService *provider, SInt32 *score)
 			logLink(br, "puente tras reentrenar");
 			vid = pollVendor(pci, 20, 50);
 			RTLOG("probe: tras reentrenar: %04x", vid);
+		}
+
+		/* Paso 3: reset del bus secundario (desenchufar y enchufar). */
+		if ((vid == 0xffff || vid == 0x0001) && br) {
+			RTLOG("probe: reset del bus secundario en el puente");
+			secondaryBusReset(br);
+			vid = pollVendor(pci, 40, 50);   /* hasta 2 s: tras un reset puede contestar CRS */
+			RTLOG("probe: tras el reset: %04x", vid);
+			logLink(br, "puente tras el reset");
+			if (vid != 0xffff && vid != 0x0001)
+				restoreBars(pci);
 		}
 
 		if (vid == 0xffff || vid == 0x0001) {

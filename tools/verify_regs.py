@@ -30,7 +30,8 @@ USERS = [ROOT / "kext" / "src" / "RTL8852BT_power.cpp",
          ROOT / "kext" / "src" / "RTL8852BT_pci.cpp",
          ROOT / "kext" / "src" / "RTL8852BT_fwdl.cpp",
          ROOT / "kext" / "src" / "RTL8852BT_h2c.cpp",
-         ROOT / "kext" / "src" / "RTL8852BT_rf.cpp"]
+         ROOT / "kext" / "src" / "RTL8852BT_rf.cpp",
+         ROOT / "kext" / "src" / "RTL8852BT_tables.cpp"]
 
 DEFINE_RE = re.compile(r"^\s*#define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+?)\s*$")
 ENUM_RE = re.compile(r"^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(0x[0-9a-fA-F]+|\d+)\s*,?\s*$")

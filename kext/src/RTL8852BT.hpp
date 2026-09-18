@@ -167,6 +167,13 @@ public:
 	u32  rfRead(u8 path, u32 addr, u32 mask);
 	bool rfWrite(u8 path, u32 addr, u32 mask, u32 data);
 
+	/* FASE 3b - tablas de banda base y radio (RTL8852BT_tables.cpp) */
+	bool applyPhyTables();
+	const u8 *findElement(u32 wantedId, u32 *outCount, u8 *outIdx);
+	u32  applyRegTable(u32 elementId, bool isRf, u8 path);
+	bool applyBbPair(u32 addr, u32 data);
+	bool applyRfPair(u8 path, u32 addr, u32 data);
+
 private:
 	bool mapBar();
 	void unmapBar();
@@ -200,6 +207,7 @@ private:
 	/* FASE 3a */
 	bool fBbRfOn = false;
 	bool fRadioReady = false;
+	bool fTablesApplied = false;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;

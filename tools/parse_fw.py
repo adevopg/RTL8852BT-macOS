@@ -42,6 +42,57 @@ def parse_single(buf, off, size, label):
     print(f"     codigo total={total} bytes, cabecera={hdr_len}, entrada={size} -> {'OK' if ok else 'INCOHERENTE'}")
     return ok
 
+ELEMENT_NAMES = {
+    0: "BBMCU0", 1: "BBMCU1", 2: "BB_REG", 3: "BB_GAIN", 4: "RADIO_A", 5: "RADIO_B",
+    6: "RADIO_C", 7: "RADIO_D", 8: "RF_NCTL", 9: "TXPWR_BYRATE", 10: "TXPWR_LMT_2GHZ",
+    11: "TXPWR_LMT_5GHZ", 12: "TXPWR_LMT_6GHZ", 13: "TXPWR_LMT_RU_2GHZ",
+    14: "TXPWR_LMT_RU_5GHZ", 15: "TXPWR_LMT_RU_6GHZ", 16: "TX_SHAPE_LMT",
+    17: "TX_SHAPE_LMT_RU", 18: "TXPWR_TRK", 19: "RFKLOG_FMT", 20: "REGD",
+    21: "TXPWR_DA_LMT_2GHZ", 22: "TXPWR_DA_LMT_5GHZ", 23: "TXPWR_DA_LMT_6GHZ",
+}
+# Elementos cuyo contenido son pares direccion/dato (idx + 7 rsvd + array)
+REG2_ELEMENTS = {2, 4, 5, 8}
+ELEMENT_ALIGN = 16
+ELEMENT_HDR_SIZE = 32
+
+
+def parse_elements(buf, mfw_end):
+    """Las tablas de configuracion van PEGADAS al final del fichero, detras del
+    contenedor multi-firmware. El 8852BT no las lleva compiladas en el driver
+    (en rtw8852bt.c sus punteros son NULL), asi que salen de aqui."""
+    off = (mfw_end + ELEMENT_ALIGN - 1) & ~(ELEMENT_ALIGN - 1)
+    print()
+    print(f"Elementos (tablas de configuracion) desde 0x{off:X}, "
+          f"{len(buf) - off} bytes restantes:")
+    found = {}
+    n = 0
+    while off + ELEMENT_HDR_SIZE <= len(buf):
+        eid, esize = struct.unpack_from("<II", buf, off)
+        ver = buf[off + 8:off + 12]
+        if esize == 0 or off + ELEMENT_HDR_SIZE + esize > len(buf):
+            break
+        name = ELEMENT_NAMES.get(eid, f"id={eid}")
+        extra = ""
+        if eid in REG2_ELEMENTS:
+            idx = buf[off + ELEMENT_HDR_SIZE - 8]
+            npairs = (esize - 8) // 8
+            extra = f"  idx={idx}  {npairs} pares direccion/dato"
+            found[name] = npairs
+        print(f"  0x{off:06X}  {name:<20}{esize:8d} B  "
+              f"v{'.'.join(map(str, ver))}{extra}")
+        off += ELEMENT_HDR_SIZE + esize
+        off = (off + ELEMENT_ALIGN - 1) & ~(ELEMENT_ALIGN - 1)
+        n += 1
+    print(f"  {n} elementos")
+    faltan = [k for k in ("BB_REG", "RADIO_A", "RADIO_B", "RF_NCTL") if k not in found]
+    if faltan:
+        print("  FALTAN tablas basicas: " + ", ".join(faltan))
+        return False
+    print("  Tablas basicas presentes: " +
+          ", ".join(f"{k}={v}" for k, v in found.items()))
+    return True
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "firmware", "rtw8852bt_fw.bin")
     buf = open(path, "rb").read()
@@ -58,6 +109,11 @@ def main():
         if shift + size > len(buf):
             print(f"  {label}: FUERA DEL FICHERO"); ok_all = False; continue
         ok_all &= parse_single(buf, shift, size, label)
+    if fw_nr:
+        cv, typ, mp, _r, shift, size = struct.unpack_from("<4BII", buf, 16 + 16 * (fw_nr - 1))
+        ok_all &= parse_elements(buf, shift + size)
+
+    print()
     print("RESULTADO:", "firmware valido" if ok_all else "firmware invalido")
     sys.exit(0 if ok_all else 1)
 

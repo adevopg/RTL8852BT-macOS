@@ -112,8 +112,11 @@ bool RTL8852BT::start(IOService *provider)
 				/* FASE 2d-2: el hito. Enviar el firmware de verdad. */
 				if (downloadFirmware()) {
 					/* FASE 3a: con el firmware dentro, encender la radio */
-					if (!setupRadio())
+					if (!setupRadio()) {
 						RTLOG("FASE 3a FALLO: la radio no respondio.");
+					} else if (!applyPhyTables()) {
+						RTLOG("FASE 3b FALLO: las tablas no se aplicaron.");
+					}
 				}
 			}
 		} else {
@@ -122,10 +125,10 @@ bool RTL8852BT::start(IOService *provider)
 	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d fwRun=%d radio=%d.",
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d fwRun=%d radio=%d tablas=%d.",
 	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0,
 	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0, fFwReady ? 1 : 0,
-	      fRadioReady ? 1 : 0);
+	      fRadioReady ? 1 : 0, fTablesApplied ? 1 : 0);
 	return true;
 
 fail:

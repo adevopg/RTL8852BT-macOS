@@ -585,7 +585,8 @@ es cambiar eso.
 | 3 | `SetupVirtualMap` desactivado | **el kernel arranca** (Darwin 25.6.0) y da panic a los 0,34 s |
 | 4 | `MmioWhitelist 0x80000000` | vuelve el fallo de memoria: `No slide values are usable!` |
 | 5 | `AllowRelocationBlock` | activo pero OpenCore no lo usa; mismo fallo de memoria |
-| 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | pendiente |
+| 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | **pasa el panic**; cargan VirtualSMC, RestrictEvents y 36 tablas ACPI (incluido nuestro SSDT); se para al arrancar IOPCIFamily |
+| 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | pendiente |
 
 **Callejon de la prueba 4:** sin la region `0x80000000` el firmware no puede leer su NVRAM
 (panic de la prueba 3); con ella, OpenCore solo libera 526 MB en vez de 2,6 GB y no queda

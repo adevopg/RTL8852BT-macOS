@@ -226,30 +226,32 @@ jobs:
             echo "Salida inesperada, revisar arriba."
           fi
 
-      - name: kmutil create - enlazar el kext en una coleccion (best effort)
-        continue-on-error: true
+      - name: Por que kmutil cree que el kext no tiene codigo
         run: |
           KEXT="$PWD/kext/build/RTL8852BT.kext"
-          REPO="$PWD/kext/build"
-          KC=/System/Library/KernelCollections
-          ID=com.poveda.driver.RTL8852BT
-          echo "La validacion principal ya la dio 'kmutil libraries' (paso anterior)."
-          echo "Esto es un extra: construir una coleccion auxiliar real, que obliga"
-          echo "a enlazar el kext contra el kernel."
+          BIN="$KEXT/Contents/MacOS/RTL8852BT"
+          echo "kmutil dijo: 'only 1 codeless kexts provided'. Un kext codeless es"
+          echo "uno SIN binario. Si macOS lo viera asi, cargaria el bundle pero no"
+          echo "ejecutaria ni una linea. Hay que descartarlo."
           echo
-          echo "=== intento con -r (repositorio) + -b (identificador) ==="
-          sudo kmutil create -z -a x86_64 -V release -n aux             -r "$REPO" -b "$ID"             -B "$KC/BootKernelExtensions.kc"             -S "$KC/SystemKernelExtensions.kc"             -A /tmp/aux.kc             --allow-missing-kdk 2>&1 | tee /tmp/create.txt || true
+          echo "=== existe el binario y coincide con CFBundleExecutable? ==="
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$KEXT/Contents/Info.plist"
+          ls -l "$KEXT/Contents/MacOS/"
           echo
-          echo "===== veredicto ====="
-          OUT=$(ls /tmp/aux.kc* 2>/dev/null | head -1)
-          if [ -n "$OUT" ]; then
-            echo "ENLAZADO CORRECTAMENTE. macOS puede cargar este kext."
-            ls -lh "$OUT"
-          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure|unresolved" /tmp/create.txt; then
-            echo "FALLO DE ENLACE REAL: faltan simbolos. Esto si es un problema."
-            exit 1
-          else
-            echo "No concluyente por limitaciones del entorno de CI, no del kext."
-            echo "kmutil create necesita un KDK de Apple que requiere cuenta de"
-            echo "desarrollador. La validacion que SI vale es la del paso anterior."
-          fi
+          echo "=== tipo de Mach-O (debe ser KEXT_BUNDLE) ==="
+          otool -hv "$BIN"
+          echo
+          echo "=== arquitecturas presentes ==="
+          lipo -info "$BIN" || true
+          echo
+          echo "=== _kmod_info debe estar DEFINIDO (letra D/S), no indefinido (U) ==="
+          nm "$BIN" | grep -iE "kmod_info|realmain|antimain|kext_apple_cc" || echo "NO APARECE (problema)"
+          echo
+          echo "=== secciones: debe existir __TEXT con codigo ==="
+          size -m "$BIN" 2>/dev/null | head -20 || otool -l "$BIN" | grep -A3 "segname __TEXT" | head -12
+          echo
+          echo "=== que dice kmutil inspect del bundle ==="
+          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -25 || true
+          echo
+          echo "=== kmutil find, que es como el sistema descubre kexts ==="
+          kmutil find -e -p "$KEXT" 2>&1 | head -20 || true

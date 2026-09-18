@@ -33,6 +33,92 @@ void RTL8852BT::free()
 	super::free();
 }
 
+/* ------------------------------------------------------------------------ */
+/* Diagnostico del enlace PCIe                                               */
+/*                                                                           */
+/* Prueba 14: la tarjeta respondia durante el escaneo PCI de macOS pero, al  */
+/* llegar a probe, el espacio de configuracion devolvia ffff:ffff. No es la  */
+/* proteccion de IOPCIDevice (con pci_log_mode=0x2 habria salido "config     */
+/* protect fail"), asi que el enlace esta caido. Sospecha principal: el      */
+/* ahorro de energia del enlace (ASPM L1 / L1.1 / L1.2), que da problemas    */
+/* conocidos con Realtek (en Linux rtw89 tiene los parametros                */
+/* disable_aspm_l1 y disable_aspm_l1ss).                                     */
+/* ------------------------------------------------------------------------ */
+
+/* Registros de la capacidad PCI Express (desplazamientos desde su inicio) */
+#define PCIE_LNKCAP   0x0C
+#define PCIE_LNKCTL   0x10
+#define PCIE_LNKSTA   0x12
+#define LNKCTL_ASPM   0x0003   /* bits 1:0: L0s y L1 */
+#define LNKCTL_RETRAIN 0x0020  /* bit 5 (solo en puertos de bajada) */
+#define LNKSTA_TRAINING 0x0800 /* bit 11 */
+#define LNKSTA_DLLLA  0x2000   /* bit 13: enlace de datos activo */
+/* Capacidad extendida L1 PM Substates (0x1E): control 1 en +0x08 */
+#define L1SS_CTL1     0x08
+#define L1SS_ENABLES  0x000F   /* PCI-PM L1.2, L1.1, ASPM L1.2, ASPM L1.1 */
+
+static void logLink(IOPCIDevice *d, const char *who)
+{
+	if (!d)
+		return;
+	UInt8 off = 0;
+	d->findPCICapability(kIOPCICapabilityIDPCIExpress, &off);
+	if (!off) {
+		RTLOG("enlace %s: sin capacidad PCIe (o no responde)", who);
+		return;
+	}
+	u32 lnkcap = d->configRead32((UInt8)(off + PCIE_LNKCAP));
+	u16 lnkctl = d->configRead16((UInt8)(off + PCIE_LNKCTL));
+	u16 lnksta = d->configRead16((UInt8)(off + PCIE_LNKSTA));
+	IOByteCount l1 = 0;
+	d->extendedFindPCICapability(kIOPCIExpressCapabilityIDL1PMSubstates, &l1);
+	u32 l1ctl = l1 ? d->extendedConfigRead32(l1 + L1SS_CTL1) : 0;
+	RTLOG("enlace %s: LNKCAP=%08x LNKCTL=%04x (ASPM=%u) LNKSTA=%04x (Gen%u x%u entrenando=%u activo=%u) L1SS=%s%08x",
+	      who, lnkcap, lnkctl, lnkctl & LNKCTL_ASPM, lnksta,
+	      lnksta & 0xF, (lnksta >> 4) & 0x3F,
+	      (lnksta & LNKSTA_TRAINING) ? 1 : 0, (lnksta & LNKSTA_DLLLA) ? 1 : 0,
+	      l1 ? "" : "(no) ", l1ctl);
+}
+
+/* El puerto PCIe de bajada que alimenta la tarjeta (GPP5 en este HP). */
+static IOPCIDevice *upstreamBridge(IOPCIDevice *pci)
+{
+	IORegistryEntry *b = pci->getParentEntry(gIOServicePlane);   /* IOPCI2PCIBridge */
+	IOService *bs = OSDynamicCast(IOService, b);
+	return bs ? OSDynamicCast(IOPCIDevice, bs->getProvider()) : nullptr;
+}
+
+static u16 pollVendor(IOPCIDevice *pci, unsigned tries, unsigned ms)
+{
+	u16 vid = 0xffff;
+	for (unsigned i = 0; i < tries; i++) {
+		vid = pci->configRead16(kIOPCIConfigVendorID);
+		if (vid != 0xffff && vid != 0x0001)   /* 0x0001 = CRS, aun iniciandose */
+			return vid;
+		IOSleep(ms);
+	}
+	return vid;
+}
+
+/* Quita el ahorro de energia del enlace en el puerto de bajada y reentrena. */
+static void retrainWithoutAspm(IOPCIDevice *br)
+{
+	UInt8 off = 0;
+	br->findPCICapability(kIOPCICapabilityIDPCIExpress, &off);
+	if (!off)
+		return;
+	IOByteCount l1 = 0;
+	br->extendedFindPCICapability(kIOPCIExpressCapabilityIDL1PMSubstates, &l1);
+	if (l1) {
+		u32 c = br->extendedConfigRead32(l1 + L1SS_CTL1);
+		br->extendedConfigWrite32(l1 + L1SS_CTL1, c & ~(u32)L1SS_ENABLES);
+	}
+	u16 ctl = br->configRead16((UInt8)(off + PCIE_LNKCTL));
+	br->configWrite16((UInt8)(off + PCIE_LNKCTL), (u16)(ctl & ~LNKCTL_ASPM));
+	br->configWrite16((UInt8)(off + PCIE_LNKCTL), (u16)((ctl & ~LNKCTL_ASPM) | LNKCTL_RETRAIN));
+	IOSleep(100);
+}
+
 IOService *RTL8852BT::probe(IOService *provider, SInt32 *score)
 {
 	/* Cada salida de probe deja rastro. En la prueba 13 (primer arranque real)
@@ -45,12 +131,42 @@ IOService *RTL8852BT::probe(IOService *provider, SInt32 *score)
 		return nullptr;
 	}
 
+	IOPCIDevice *br = upstreamBridge(pci);
 	u16 vid = pci->configRead16(kIOPCIConfigVendorID);
 	u16 did = pci->configRead16(kIOPCIConfigDeviceID);
-	RTLOG("probe: espacio de configuracion dice %04x:%04x", vid, did);
-	if (vid == 0xffff) {
-		RTLOG("probe: 0xffff = la tarjeta no responde en el bus (apagada o enlace caido) -> no");
-		return nullptr;
+	RTLOG("probe: espacio de configuracion dice %04x:%04x (bus %u dev %u fn %u)", vid, did,
+	      pci->getBusNumber(), pci->getDeviceNumber(), pci->getFunctionNumber());
+
+	if (vid == 0xffff || vid == 0x0001) {
+		if (br) {
+			RTLOG("probe: puente %u:%u.%u buses prim=%u sec=%u sub=%u",
+			      br->getBusNumber(), br->getDeviceNumber(), br->getFunctionNumber(),
+			      br->configRead8((UInt8)0x18), br->configRead8((UInt8)0x19), br->configRead8((UInt8)0x1A));
+			logLink(br, "puente");
+		} else {
+			RTLOG("probe: no encuentro el puente de arriba");
+		}
+
+		/* Paso 1: esperar. Si el enlace se esta reentrenando, vuelve solo. */
+		vid = pollVendor(pci, 20, 50);
+		RTLOG("probe: tras esperar 1 s: %04x", vid);
+
+		/* Paso 2: quitar ASPM/L1SS en el puerto de bajada y reentrenar. */
+		if ((vid == 0xffff || vid == 0x0001) && br) {
+			RTLOG("probe: reentreno el enlace sin ahorro de energia (ASPM y L1SS a 0)");
+			retrainWithoutAspm(br);
+			logLink(br, "puente tras reentrenar");
+			vid = pollVendor(pci, 20, 50);
+			RTLOG("probe: tras reentrenar: %04x", vid);
+		}
+
+		if (vid == 0xffff || vid == 0x0001) {
+			RTLOG("probe: 0xffff = la tarjeta no responde en el bus (apagada o enlace caido) -> no");
+			return nullptr;
+		}
+		did = pci->configRead16(kIOPCIConfigDeviceID);
+		RTLOG("probe: la tarjeta VUELVE a responder: %04x:%04x", vid, did);
+		logLink(pci, "tarjeta");
 	}
 	if (vid != 0x10ec || (did != 0xb520 && did != 0xb852 && did != 0xb85b)) {
 		RTLOG("probe: no es una RTL8852BT/BE -> no");

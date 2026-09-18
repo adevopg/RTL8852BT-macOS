@@ -284,10 +284,13 @@ bool RTL8852BT::setupInterrupt()
 		RTLOG("MSI disponible en el indice %d", msiIndex);
 	}
 
+	/* interruptOccurred e interruptFilter son estaticas y ya tienen la firma
+	 * exacta que pide IOKit, asi que van directas. OSMemberFunctionCast es
+	 * para metodos de instancia; usarlo aqui no compila. */
 	fIntSource = IOFilterInterruptEventSource::filterInterruptEventSource(
 	        this,
-	        OSMemberFunctionCast(IOInterruptEventSource::Action, this, &RTL8852BT::interruptOccurred),
-	        OSMemberFunctionCast(IOFilterInterruptEventSource::Filter, this, &RTL8852BT::interruptFilter),
+	        &RTL8852BT::interruptOccurred,
+	        &RTL8852BT::interruptFilter,
 	        fPci, msiIndex);
 	if (!fIntSource) {
 		RTLOG("no se pudo crear la fuente de interrupcion");

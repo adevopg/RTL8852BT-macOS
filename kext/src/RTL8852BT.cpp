@@ -35,23 +35,40 @@ void RTL8852BT::free()
 
 IOService *RTL8852BT::probe(IOService *provider, SInt32 *score)
 {
+	/* Cada salida de probe deja rastro. En la prueba 13 (primer arranque real)
+	 * salio "init" pero nada de probe, asi que se fue por una salida muda. */
+	RTLOG("probe: entrada (provider %s)", provider ? provider->getName() : "NULL");
+
 	IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, provider);
-	if (!pci)
+	if (!pci) {
+		RTLOG("probe: el provider no es IOPCIDevice -> no");
 		return nullptr;
+	}
 
 	u16 vid = pci->configRead16(kIOPCIConfigVendorID);
 	u16 did = pci->configRead16(kIOPCIConfigDeviceID);
-	if (vid != 0x10ec || (did != 0xb520 && did != 0xb852 && did != 0xb85b))
+	RTLOG("probe: espacio de configuracion dice %04x:%04x", vid, did);
+	if (vid == 0xffff) {
+		RTLOG("probe: 0xffff = la tarjeta no responde en el bus (apagada o enlace caido) -> no");
 		return nullptr;
+	}
+	if (vid != 0x10ec || (did != 0xb520 && did != 0xb852 && did != 0xb85b)) {
+		RTLOG("probe: no es una RTL8852BT/BE -> no");
+		return nullptr;
+	}
 
-	RTLOG("probe: %04x:%04x", vid, did);
-	return super::probe(provider, score);
+	IOService *res = super::probe(provider, score);
+	RTLOG("probe: %s (score %d)", res ? "aceptado" : "rechazado por IOService", score ? (int)*score : 0);
+	return res;
 }
 
 bool RTL8852BT::start(IOService *provider)
 {
-	if (!super::start(provider))
+	RTLOG("start: entrada");
+	if (!super::start(provider)) {
+		RTLOG("start: IOService::start fallo");
 		return false;
+	}
 
 	fPci = OSDynamicCast(IOPCIDevice, provider);
 	if (!fPci) {

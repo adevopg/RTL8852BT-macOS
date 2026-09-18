@@ -590,7 +590,8 @@ es cambiar eso.
 | 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | ninguna linea `[PCIe:`: se cuelga antes de leer el puente raiz |
 | 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | **macOS reconoce los 16 hilos** (`AppleACPICPU ... Enabled`) y pasa el cuelgue; pantalla negra (normal durante la configuracion PCI) y reinicio brusco a los pocos segundos |
 | 10 | `cpus=1` (diagnostico: un solo hilo) | **panic legible**: `VoodooI2CDeviceNub::getGPIOController`, kext del panel tactil, a los 0,0039 s |
-| 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | pendiente |
+| 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | sin panic; entra en `[ PCI configuration begin ]`, todos los rangos ACPI `added(ok)`; la pantalla se apaga (normal) |
+| 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -648,3 +649,16 @@ VoodooI2C busca un controlador GPIO que solo existe en portatiles Intel. **No es
 driver:** ocurre a los 0,0039 s de arrancar el emparejamiento de dispositivos y no aparece
 `RTL8852BT` en el backtrace. Se desactivan los cuatro kexts de VoodooI2C (son del panel
 tactil, no hacen falta para arrancar).
+
+**Prueba 11.** Sin VoodooI2C no hay panic. El registro de PCI sale entero hasta
+`[ PCI configuration begin ]` y `console 1920 x 1200 @ 0x900000000`: puente raiz
+`1022:1122`, todos los rangos del `_CRS` aceptados, ventana de 64 bits
+`0x8a0200000 len 0x7a9fe00000` que contiene la pantalla. Despues `configure()` apaga la
+pantalla hasta terminar, y lo que pase ahi no se ve.
+
+**Parche de diagnostico (prueba 12).** Del `BootKernelExtensions.kc` de macOS 26.6
+(extraido del BaseSystem.dmg con 7-Zip) se desensamblo `IOPCIConfigurator::configure`:
+`31 f6 ba 07 00 00 00 ff 91 f0 08 00 00` = `xor esi,esi; mov edx,7 (kPEDisableScreen);
+call [rcx+0x8f0] (setConsoleInfo)`. Patron unico en todo el KC. Se cambia el 7 por un 6
+(`kPEEnableScreen`) con un `Kernel > Patch` de OpenCore sobre `com.apple.iokit.IOPCIFamily`,
+base `__ZN17IOPCIConfigurator9configureEj`. Se quita cuando macOS arranque.

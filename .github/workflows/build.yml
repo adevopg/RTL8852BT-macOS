@@ -235,7 +235,11 @@ jobs:
           echo "Opciones correctas (de la ayuda): -A/--auxiliary-path, -p/--bundle-path,"
           echo "-k/--kernel, -x/--explicit-only."
           echo
-          sudo kmutil create -z -a x86_64 -V release -n aux             -k /System/Library/Kernels/kernel             -B "$KC/BootKernelExtensions.kc"             -S "$KC/SystemKernelExtensions.kc"             -A /tmp/aux.kc             -p "$KEXT"             -x 2>&1 | tee /tmp/create.txt || true
+          sudo kmutil create -z -a x86_64 -V release -n aux             -k /System/Library/Kernels/kernel             -B "$KC/BootKernelExtensions.kc"             -S "$KC/SystemKernelExtensions.kc"             -A /tmp/aux.kc             -p "$KEXT"             -x --allow-missing-kdk 2>&1 | tee /tmp/create.txt || true
+          if grep -q "Missing Developer Kit" /tmp/create.txt; then
+            echo "Sigue pidiendo KDK; se reintenta sin -x por si acaso."
+            sudo kmutil create -z -a x86_64 -V release -n aux               -B "$KC/BootKernelExtensions.kc"               -S "$KC/SystemKernelExtensions.kc"               -A /tmp/aux.kc               -p "$KEXT" --allow-missing-kdk 2>&1 | tee -a /tmp/create.txt || true
+          fi
           echo
           echo "===== veredicto ====="
           OUT=$(ls /tmp/aux.kc* 2>/dev/null | head -1)

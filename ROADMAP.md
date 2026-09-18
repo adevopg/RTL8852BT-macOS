@@ -592,7 +592,8 @@ es cambiar eso.
 | 10 | `cpus=1` (diagnostico: un solo hilo) | **panic legible**: `VoodooI2CDeviceNub::getGPIOController`, kext del panel tactil, a los 0,0039 s |
 | 11 | desactivar VoodooI2C, VoodooI2CServices, VoodooGPIO y VoodooI2CHID | sin panic; entra en `[ PCI configuration begin ]`, todos los rangos ACPI `added(ok)`; la pantalla se apaga (normal) |
 | 12 | parche IOPCIFamily: `kPEDisableScreen` 7 -> `kPEEnableScreen` 6 en `IOPCIConfigurator::configure` (diagnostico) | pantalla visible; se para en `bridgeAllocateResources` del puente raiz, tras listar los hijos (antes de `applyConfiguration`) |
-| 13 | `ResizeAppleGpuBars = 0` (la Radeon 860M tiene un BAR de 2 GB; macOS admite 1 GB como maximo) | pendiente |
+| 13 | `ResizeAppleGpuBars = 0` (la Radeon 860M tiene un BAR de 2 GB; macOS admite 1 GB como maximo) | **PCI completo. Nuestro driver se ejecuta: `RTL8852BT: init`**. NVMe y APFS cargan; se para en `ktriage_register_subsystem_strings` |
+| 14 | kext nuevo que registra cada salida de `probe`/`start` | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -673,3 +674,11 @@ pide `PFM` de 2 GB con alineacion de 2 GB y aparece sin asignar (`0x0:0x0`). En 
 la Radeon 860M (`1002:1114`) tiene un BAR de 2 GB en `0x900000000` (la pantalla) y otro de
 256 MB en `0x80000000`. Segun la documentacion de OpenCore, macOS admite como maximo 1 GB
 por BAR de GPU; `ResizeAppleGpuBars = 0` es el unico valor soportado y solo afecta a macOS.
+
+**Prueba 13: hito.** Con `ResizeAppleGpuBars = 0` OpenCore reduce los BAR de la Radeon
+(`RBAR 1/2 from 11 to 8`, 2 GB -> 256 MB; `RBAR 2/2 from 8 to 1`) y macOS termina la
+configuracion PCI. Se publica `WLAN (1:0:0)` y **nuestro kext se ejecuta en el hardware
+real por primera vez**: `RTL8852BT: init (fase 1, sin WiFi funcional)`. No sale `probe`:
+en el codigo, `probe` sale en silencio si `configRead16` no devuelve `10ec:b520`, asi que
+probablemente leyo `0xffff`. El kext de la prueba 14 registra cada salida. El arranque
+sigue hasta cargar APFS y se para en `ktriage_register_subsystem_strings`.

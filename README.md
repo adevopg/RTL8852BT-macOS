@@ -8,9 +8,18 @@ El kext compila y enlaza limpio en CI y **el binario esta listo para descargar**
 [Releases > ultimo-build](../../releases/tag/ultimo-build).
 
 ```
-Runner:  macOS 26.6.2 (macos-26-arm64)      Xcode: 26.6, SDK MacOSX26.5
-Salida:  Mach-O 64-bit kext bundle x86_64   296 simbolos sin resolver, todos del kernel
+Compilacion:  macOS 26.6.2 + Xcode 26.6   ->  Mach-O 64-bit kext bundle x86_64
+Validacion:   macOS 15.7.9 y 26.6 Intel   ->  kmutil resuelve TODOS los simbolos
 ```
+
+Validado en un Mac Intel real, en cada push:
+
+| Comprobacion | Resultado |
+|---|---|
+| `kmutil libraries` resuelve los simbolos contra el kernel | las 3 librerias encontradas |
+| Tipo de Mach-O | KEXTBUNDLE, X86_64, NOUNDEFS |
+| `_kmod_info`, `_realmain`, `_antimain`, `_kext_apple_cc` | definidos |
+| Codigo en `__text` | 8.466 bytes |
 
 Lo que **no** se ha hecho: cargarlo en el portatil y ver si el chip responde.
 Ese es el siguiente paso y necesita tu hardware.

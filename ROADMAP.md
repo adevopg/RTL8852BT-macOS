@@ -94,6 +94,15 @@ rechazado el kext y el fallo solo se habria visto al arrancar el portatil. Lo de
 paso de CI que separa los simbolos sin resolver; por eso ese paso ahora **falla el build**
 si aparece cualquier simbolo que el kernel no exporte.
 
+**Validacion en macOS Intel, automatica.** GitHub ofrece runners Intel como etiquetas
+estandar: `macos-15-intel` y `macos-26-intel`. Ahi `kmutil libraries` resuelve de verdad
+los simbolos del kext contra las colecciones del kernel. Eso responde a "¿macOS aceptaria
+este kext?" sin montar ninguna maquina virtual, y corre en cada push.
+
+Lo que NO se puede hacer en CI: `kmutil create` de una coleccion auxiliar, porque exige un
+Kernel Development Kit ligado a una cuenta de Apple Developer. No hace falta: `kmutil
+libraries` ya da la respuesta.
+
 **No te fies de `kextlibs`.** Al compilar cruzado desde Apple Silicon reporta 298 simbolos
 no encontrados, porque compara contra los kexts arm64 del sistema. El criterio correcto es
 el que aplica ahora el workflow: que los simbolos sin resolver sean todos del kernel
@@ -398,6 +407,8 @@ Se honesto contigo mismo sobre que esta probado:
 | `RTL8852BT.cpp` fase 1 | **Compila y enlaza** en CI. Nunca ejecutado |
 | `RTL8852BT_power.cpp` fase 2a | **Compila y enlaza** en CI. Nunca ejecutado en el chip |
 | CI en GitHub Actions | **Funciona**: macOS 26, Xcode 26.6, Mach-O x86_64 |
+| Validacion en macOS Intel | **Funciona**: kmutil resuelve los simbolos; el binario lleva codigo |
+| Carga real del kext en el chip | **Sin probar**. Necesita el portatil |
 | Fases 2b a 5 | **No escritas** |
 
 Nada de lo que hay en `kext/` ha tocado hardware real todavia. El primer paso del guion

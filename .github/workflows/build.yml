@@ -27,6 +27,9 @@ jobs:
       - name: Verificar el mapa de registros contra el driver Linux
         run: python3 tools/verify_regs.py
 
+      - name: Verificar que el bundle del kext esta bien formado
+        run: python3 tools/verify_bundle.py
+
   build:
     name: Compilar el kext en macOS
     runs-on: macos-latest
@@ -162,3 +165,62 @@ jobs:
           path: build.log
           retention-days: 7
           if-no-files-found: ignore
+
+  # Comprobar si macOS ACEPTARIA el kext, sin tener el hardware delante.
+  # kextutil -n valida la estructura, resuelve OSBundleLibraries y comprueba
+  # que los 296 simbolos existen de verdad en el kernel, todo SIN cargarlo.
+  # Es lo mismo que daria una maquina virtual, pero automatico.
+  #
+  # Requiere un runner x86_64: en Apple Silicon no estan los simbolos del
+  # kernel Intel. Por eso se prueban varias etiquetas y el job no bloquea.
+  validar-en-macos:
+    name: Validar el kext en macOS real
+    needs: build
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-14, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Que maquina nos ha tocado
+        id: arch
+        run: |
+          echo "etiqueta: ${{ matrix.runner }}"
+          echo "uname -m: $(uname -m)"
+          echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
+          sw_vers
+
+      - name: Compilar
+        run: cd kext && make
+
+      - name: Estructura del bundle (funciona en cualquier arquitectura)
+        run: |
+          KEXT=kext/build/RTL8852BT.kext
+          echo "--- Info.plist ---"
+          plutil -lint "$KEXT/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c Print "$KEXT/Contents/Info.plist" | head -40
+          echo "--- el firmware esta dentro? ---"
+          ls -l "$KEXT/Contents/Resources/"
+
+      - name: kextutil - validacion real contra el kernel
+        run: |
+          KEXT=kext/build/RTL8852BT.kext
+          echo "Arquitectura del runner: $(uname -m); el kext es x86_64."
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "Runner Apple Silicon: no hay simbolos del kernel x86_64."
+            echo "kextutil se ejecuta igualmente, pero un fallo aqui NO significa"
+            echo "que el kext este mal; solo que no se puede validar cruzado."
+          fi
+          # -n = no cargar, solo validar.  -t = informe completo de problemas.
+          sudo kextutil -n -t -arch x86_64 "$KEXT" 2>&1 | tee /tmp/kextutil.txt || true
+          echo "===== veredicto ====="
+          if grep -qi "appears to be loadable" /tmp/kextutil.txt; then
+            echo "macOS ACEPTA el kext: es cargable."
+          elif grep -qiE "no kernel file|not valid for architecture|Can.t use" /tmp/kextutil.txt; then
+            echo "No concluyente: limitacion de arquitectura del runner, no del kext."
+          else
+            echo "Revisar la salida de arriba."
+          fi

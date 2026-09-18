@@ -584,7 +584,8 @@ es cambiar eso.
 | 2 | `DevirtualiseMmio` + OpenCore DEBUG + SSDT corregido | **entrega el control al kernel** (`EXITBS:START`) y ahi se queda |
 | 3 | `SetupVirtualMap` desactivado | **el kernel arranca** (Darwin 25.6.0) y da panic a los 0,34 s |
 | 4 | `MmioWhitelist 0x80000000` | vuelve el fallo de memoria: `No slide values are usable!` |
-| 5 | `AllowRelocationBlock` | pendiente |
+| 5 | `AllowRelocationBlock` | activo pero OpenCore no lo usa; mismo fallo de memoria |
+| 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | pendiente |
 
 **Callejon de la prueba 4:** sin la region `0x80000000` el firmware no puede leer su NVRAM
 (panic de la prueba 3); con ella, OpenCore solo libera 526 MB en vez de 2,6 GB y no queda

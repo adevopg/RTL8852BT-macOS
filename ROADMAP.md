@@ -278,7 +278,7 @@ Si coincide, queda validada de golpe la cadena entera: mapeo de BAR, encendido d
 y acceso a registros. El codigo ya rechaza una MAC de todo `FF` (efuse en blanco o sin
 alimentar), de todo ceros (no se leyo nada) o con el bit multicast puesto.
 
-### 4.4 FASE 2d — Descargar el firmware al chip (MITAD ESCRITA)
+### 4.4 FASE 2d — Descargar el firmware al chip (ESCRITA ENTERA, sin probar)
 
 **Fuente:** `fw.c` → `rtw89_fw_download`, `rtw89_fw_download_hdr`, `rtw89_fw_download_main`
 
@@ -298,10 +298,45 @@ RTL8852BT: FASE 2d-1 lista: el chip espera el firmware.
 El log traduce el estado a palabras, porque los fallos que se veran aqui (checksum,
 seguridad, version de chip que no coincide) son incomprensibles como numero suelto.
 
-**Parte 2, pendiente:** enviar los bytes por H2C sobre DMA, seccion a seccion, a las
-direcciones que trae la cabecera (0xb8970000, 0xb8e12c00, 0xb8e116a0), en paquetes de
-`FWDL_SECTION_PER_PKT_LEN` = 2020 bytes. Necesita el camino de transmision del canal
-CH12 funcionando sobre los anillos de la fase 2b.
+**Parte 2, ya escrita** (`kext/src/RTL8852BT_h2c.cpp`): enviar los bytes por el canal
+CH12 sobre los anillos de la fase 2b.
+
+Como viaja un paquete:
+
+```
+buffer DMA:  [ descriptor TX 24 B ][ cabecera H2C 8 B ][ datos ]
+anillo CH12: una entrada de 8 bytes con la direccion fisica y el tamano
+```
+
+Se avanza el puntero de escritura y se escribe en su registro de indice: eso es lo que
+despierta al chip. Luego se espera a que el puntero del hardware, que viene en los bits
+altos del mismo registro, alcance al nuestro. **Sin esa espera** reutilizariamos el
+buffer antes de que el chip lo lea, y el firmware llegaria corrupto de forma
+intermitente, que es la peor clase de fallo posible.
+
+Dos formatos distintos, facil de pasar por alto:
+
+| Que se envia | Cabecera H2C | Bit fw_dl |
+|---|---|---|
+| Cabecera del firmware | si, 8 bytes | no |
+| Secciones | no, van en crudo | si |
+
+Para este firmware son tres secciones, a 0xb8970000, 0xb8e12c00 y 0xb8e116a0, enviadas
+en trozos de 2020 bytes.
+
+**Criterio de aceptacion, el hito del proyecto:**
+
+```
+RTL8852BT: fwdl: cabecera aceptada, camino de descarga abierto
+RTL8852BT: fwdl: seccion 0 -> 0xb8970000, 240088 bytes en trozos de 2020
+RTL8852BT: fwdl: seccion 0 enviada en 119 paquetes
+   (y las otras dos)
+RTL8852BT: fwdl: el firmware ha arrancado dentro del chip.
+RTL8852BT: FASE 2d COMPLETA
+```
+
+Con eso, el procesador del chip esta ejecutando el firmware de Realtek. A partir de ahi
+el resto del driver es configurarlo.
 
 **Criterio de aceptacion:** el chip contesta un C2H de `fwdl` con estado OK, y
 `R_AX_WCPU_FW_CTRL` indica firmware listo. Equivale a `RTW89_FLAG_FW_RDY` en Linux.
@@ -410,7 +445,9 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     Fase 2c  efuse: MAC address                 (efuse.c)
 [HECHO]     Fase 2b  anillos DMA + interrupciones      (pci.c)
 [HECHO]     Fase 2d-1 modo descarga de firmware         (mac.c)
-[SIGUIENTE] Fase 2d-2 enviar el firmware por H2C        (fw.c)   <- hito clave
+[HECHO]     Fase 2d-2 enviar el firmware por H2C        (fw.c)   <- hito clave
+[AHORA]     ---- PROBAR en el portatil: la fase 2 esta entera ----
+[SIGUIENTE] Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)
             Fase 5   IO80211Family / AirportItlwm

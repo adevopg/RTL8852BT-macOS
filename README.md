@@ -35,7 +35,7 @@ con criterio de aceptacion y como verificar cada una bajo OpenCore.**
 | 2b | Anillos DMA TX/RX e interrupciones (pci.c) | COMPILA en CI. 7 canales TX + 2 RX, MSI |
 | 2c | Lectura de efuse: direccion MAC y calibracion (efuse.c) | COMPILA en CI. La MAC es contrastable con `getmac /v` de Windows |
 | 2d-1 | Poner el chip en modo descarga de firmware (mac.c) | COMPILA en CI |
-| 2d-2 | Enviar el firmware por H2C sobre DMA (fw.c) | pendiente. Hito clave del proyecto |
+| 2d-2 | Enviar el firmware por H2C sobre DMA (fw.c) | COMPILA en CI. Hito clave, sin probar |
 | 3 | Init de PHY/BB/RF con las tablas de rtw8852bt (rtw8852b_table.c, 750 KB) | pendiente |
 | 4 | Pila 802.11: scan, auth, assoc, cifrado WPA2/3. Se reutiliza la de itlwm (net80211 de OpenBSD portada) | pendiente, la mayor parte del trabajo |
 | 5 | Integracion con IO80211Family de Apple para que aparezca en Ajustes > Wi-Fi | pendiente |

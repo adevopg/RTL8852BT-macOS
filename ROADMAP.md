@@ -586,7 +586,15 @@ es cambiar eso.
 | 4 | `MmioWhitelist 0x80000000` | vuelve el fallo de memoria: `No slide values are usable!` |
 | 5 | `AllowRelocationBlock` | activo pero OpenCore no lo usa; mismo fallo de memoria |
 | 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | **pasa el panic**; cargan VirtualSMC, RestrictEvents y 36 tablas ACPI (incluido nuestro SSDT); se para al arrancar IOPCIFamily |
-| 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | pendiente |
+| 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | mismo sitio: `npci` no era la causa |
+| 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | pendiente |
+
+**Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
+`pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
+`addHostBridge()`, y al acabar llama a `configure()`, que escribe `[ PCI configuration begin ]`
+con `IOLog` (visible en pantalla). Como no sale, el cuelgue esta dentro de `addHostBridge()`:
+al leer el espacio de configuracion del puente raiz (ECAM) o al recoger sus rangos de ACPI.
+Es antes de configurar ningun dispositivo, asi que nuestro driver no interviene.
 
 **Callejon de la prueba 4:** sin la region `0x80000000` el firmware no puede leer su NVRAM
 (panic de la prueba 3); con ella, OpenCore solo libera 526 MB en vez de 2,6 GB y no queda

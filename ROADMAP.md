@@ -227,17 +227,35 @@ Si el chip esta en modo DAC de 32 bits (`rtw89_pci_cfg_dac`), tienes que forzar
 `kIOMemoryMapperNone` y mascara de 32 bits en el `IODMACommand`, o el DMA escribira
 en una direccion que el chip no puede alcanzar.
 
-### 4.3 FASE 2c — Leer la efuse (PENDIENTE)
+### 4.3 FASE 2c — Leer la efuse (ESCRITA Y COMPILA, sin probar)
 
 **Fuente:** `efuse.c`, y `rtw89_mac_efuse_read_*` en `mac.c`
 
 Aqui sale la **direccion MAC real** de tu tarjeta y las constantes de calibracion.
 Sin esto no puedes asociarte a nada.
 
-**Criterio de aceptacion:** el log imprime una MAC que empieza por un OUI de Realtek
-o de HP, no `00:00:00:00:00:00` ni `FF:FF:FF:FF:FF:FF`. Comparala con la que ve Windows
-en `getmac /v` para confirmar que la lectura es correcta. Este es el mejor test cruzado
-que tienes: mismo hardware, dos sistemas, un valor que debe coincidir.
+**Ya implementada** en `kext/src/RTL8852BT_efuse.cpp`. Se adelanto por delante de la 2b
+porque la efuse se lee entera por registros (`R_AX_EFUSE_CTRL`, un byte por vuelta con
+espera activa), sin DMA ni interrupciones. Por eso puede ir justo tras encender el MAC.
+
+El mapa fisico esta comprimido: cada bloque lleva dos bytes de cabecera que dicen a que
+indice logico va y cuales de sus cuatro palabras estan escritas; `0xFF` marca el final.
+`rtw89_efuse_8852bt.h` reproduce el struct y deja que el compilador confirme con
+`static_assert` que la MAC cae en el offset 0x400, que fue lo que calcule a mano.
+
+**Criterio de aceptacion.** En el log:
+
+```
+RTL8852BT: efuse: volcado fisico OK (1216 bytes). Primeros 16: ...
+RTL8852BT: efuse: MAC xx:xx:xx:xx:xx:xx  rfe_type=N xtal_k=0xNN pais=ES
+RTL8852BT: efuse: MAC valida. Compruebala en Windows con 'getmac /v'
+```
+
+**Este es el mejor test cruzado de todo el proyecto.** Arranca Windows, ejecuta
+`getmac /v`, y compara. Mismo hardware, dos sistemas, un valor que debe ser identico.
+Si coincide, queda validada de golpe la cadena entera: mapeo de BAR, encendido del MAC
+y acceso a registros. El codigo ya rechaza una MAC de todo `FF` (efuse en blanco o sin
+alimentar), de todo ceros (no se leyo nada) o con el bit multicast puesto.
 
 ### 4.4 FASE 2d — Descargar el firmware al chip (PENDIENTE)
 
@@ -351,8 +369,8 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     Fase 2a  encendido del MAC + xtal_si
 [HECHO]     CI en GitHub Actions: compila el kext sin necesidad de Mac
 [AHORA]     ---- PROBAR el kext en el portatil con el USB de OpenCore ----
+[HECHO]     Fase 2c  efuse: MAC address                 (efuse.c)
 [SIGUIENTE] Fase 2b  anillos DMA + interrupciones      (pci.c)
-            Fase 2c  efuse: MAC address                 (efuse.c)
             Fase 2d  descarga de firmware al chip       (fw.c)   <- hito clave
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)

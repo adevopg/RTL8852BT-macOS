@@ -117,7 +117,7 @@ bool RTL8852BT::dumpLogicalEfuse(const u8 *phyMap, u8 *logMap)
 			break;   /* 0xff = fin de los datos grabados */
 
 		u8 blkIdx = get_efuse_blk_idx(hdr1, hdr2);
-		u8 wordEn = hdr2 & 0xf;
+		u8 wordEn = (u8)(hdr2 & 0xf);
 		phyIdx += 2;
 
 		for (int i = 0; i < 4; i++) {
@@ -150,8 +150,8 @@ bool RTL8852BT::parseEfuseMap(const u8 *logMap)
 	memcpy(fMacAddr, map->e.mac_addr, ETH_ALEN);
 	fRfeType      = map->rfe_type;
 	fXtalCap      = map->xtal_k;
-	fCountry[0]   = map->country_code[0];
-	fCountry[1]   = map->country_code[1];
+	fCountry[0]   = (char)map->country_code[0];
+	fCountry[1]   = (char)map->country_code[1];
 
 	/* Una efuse en blanco da todo 0xFF; sin grabar, todo 0x00. Ninguna de las
 	 * dos es una MAC valida, y ademas el bit multicast (el 0 del primer byte)

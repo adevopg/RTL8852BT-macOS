@@ -166,58 +166,29 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Comprobar si macOS ACEPTARIA el kext, sin tener el hardware delante.
-  # kextutil -n valida la estructura, resuelve OSBundleLibraries y comprueba
-  # que los 296 simbolos existen de verdad en el kernel, todo SIN cargarlo.
-  # Es lo mismo que daria una maquina virtual, pero automatico.
-  #
-  # Requiere un runner x86_64: en Apple Silicon no estan los simbolos del
-  # kernel Intel. Por eso se prueban varias etiquetas y el job no bloquea.
-  validar-en-macos:
-    name: Validar el kext en macOS real
-    needs: build
-    continue-on-error: true
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Que maquina nos ha tocado
-        id: arch
-        run: |
-          echo "uname -m: $(uname -m)"
-          echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
-          sw_vers
-
-      - name: Compilar
-        run: cd kext && make
-
-      - name: Estructura del bundle (funciona en cualquier arquitectura)
-        run: |
-          KEXT=kext/build/RTL8852BT.kext
-          echo "--- Info.plist ---"
-          plutil -lint "$KEXT/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c Print "$KEXT/Contents/Info.plist" | head -40
-          echo "--- el firmware esta dentro? ---"
-          ls -l "$KEXT/Contents/Resources/"
-
-      - name: Validacion con kmutil (lo que macOS mira al cargar)
-        run: |
-          KEXT=kext/build/RTL8852BT.kext
-          echo "Runner: $(uname -m).  El kext es x86_64."
-          echo
-          echo "=== kmutil check: estructura del bundle ==="
-          # kmutil check valida el bundle en si; no depende de la arquitectura.
-          kmutil check --bundle-path "$KEXT" 2>&1 | tee /tmp/check.txt || true
-          if [ ! -s /tmp/check.txt ]; then
-            echo "(sin salida = sin problemas; kmutil check calla cuando todo esta bien)"
-          fi
-          echo
-          echo "=== kmutil inspect: metadatos que leera el kernel ==="
-          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -30 || true
-          echo
-          echo "=== limitacion honesta ==="
-          echo "Los runners macOS de GitHub son todos Apple Silicon desde 2025."
-          echo "Resolver los 296 simbolos contra el kernel exige un macOS x86_64,"
-          echo "asi que esa comprobacion NO se puede hacer aqui. Lo que si queda"
-          echo "cubierto: estructura del bundle (kmutil + tools/verify_bundle.py) y"
-          echo "que todo simbolo sin resolver sea de los que exporta el kernel."
+# ----------------------------------------------------------------------------
+# NOTA: aqui habia un job 'validar-en-macos' que intentaba usar kextutil/kmutil
+# para resolver los simbolos contra el kernel sin tener el hardware. Se retiro
+# el 18/09/2026 porque NO PUEDE FUNCIONAR:
+#
+#   - Los runners macOS gratuitos de GitHub (macos-14, macos-15, macos-latest)
+#     son todos Apple Silicon. Ya no hay Intel gratis.
+#   - kextutil en macOS moderno es un envoltorio de kmutil: "-n is not a
+#     supported kmutil mode".
+#   - kmutil inspect lo dice sin rodeos:
+#       "Incompatible architecture: Binary is for x86_64, but needed arch arm64e"
+#
+# Un Mac ARM no puede validar un kext x86_64. Mantener el job solo gastaba
+# minutos de macOS, que en cuenta privada son limitados.
+#
+# Lo que SI queda cubierto automaticamente:
+#   - tools/verify_bundle.py  estructura del bundle, coincidencia de
+#     kmod_info con Info.plist, IOClass, PCI match, dependencias.
+#   - El paso "Revisar el kext construido" del job build: comprueba que todo
+#     simbolo sin resolver sea de los que exporta el kernel, y falla si no.
+#
+# Lo que NO se puede cubrir sin un macOS x86_64: la resolucion real de los 296
+# simbolos y la carga efectiva del kext. Eso exige una VM de macOS sobre este
+# mismo equipo, o el portatil arrancando del USB de OpenCore. La segunda opcion
+# ademas comprueba lo unico que de verdad importa: si el chip responde.
+# ----------------------------------------------------------------------------

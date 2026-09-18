@@ -99,11 +99,25 @@ bool RTL8852BT::start(IOService *provider)
 			RTLOG("FASE 2b FALLO: no se pudieron preparar los anillos DMA.");
 		else
 			fDmaReady = true;
+
+		/* FASE 2d-1: poner el chip en modo descarga de firmware. Necesita
+		 * que el firmware ya este validado en memoria, cosa que hace el
+		 * callback asincrono de la fase 1, asi que puede no estar listo
+		 * todavia en el primer arranque. */
+		if (fFwValid) {
+			if (!prepareFirmwareDownload())
+				RTLOG("FASE 2d-1 FALLO: el chip no entro en modo descarga.");
+			else
+				fFwdlReady = true;
+		} else {
+			RTLOG("FASE 2d-1 omitida: el firmware aun no estaba validado.");
+		}
 	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d. NO hay WiFi aun.",
-	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0, fDmaReady ? 1 : 0);
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d. NO hay WiFi aun.",
+	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0,
+	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0);
 	return true;
 
 fail:

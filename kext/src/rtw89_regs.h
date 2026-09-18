@@ -51,6 +51,28 @@
 #define R_AX_EFUSE_CTRL_1_V1              0x0038
 #define B_AX_EF_BURST                     BIT(19)
 
+/* Control del procesador interno del chip (WCPU) y descarga de firmware */
+#define R_AX_SYS_CLK_CTRL                 0x0008
+#define B_AX_CPU_CLK_EN                   BIT(14)
+
+#define R_AX_HALT_H2C_CTRL                0x0160
+#define R_AX_HALT_C2H_CTRL                0x0164
+#define R_AX_HALT_H2C                     0x0168
+#define R_AX_HALT_C2H                     0x016C
+
+#define R_AX_WCPU_FW_CTRL                 0x01E0
+#define B_AX_WCPU_FWDL_STS_MASK           GENMASK(7, 5)
+#define B_AX_FWDL_PATH_RDY                BIT(2)
+#define B_AX_H2C_PATH_RDY                 BIT(1)
+#define B_AX_WCPU_FWDL_EN                 BIT(0)
+
+#define R_AX_BOOT_REASON                  0x01E6
+#define B_AX_BOOT_REASON_MASK             GENMASK(2, 0)
+
+#define R_AX_UDM2                         0x01F8
+#define R_AX_SEC_CTRL                     0x0C00
+#define B_AX_SEC_IDMEM_SIZE_CONFIG_MASK   GENMASK(17, 16)
+
 #define R_AX_SYS_SWR_CTRL1                0x0010
 #define B_AX_SYM_CTRL_SPS_PWMFREQ         BIT(10)
 
@@ -65,6 +87,8 @@
 
 #define R_AX_PLATFORM_ENABLE              0x0088
 #define B_AX_PLATFORM_EN                  BIT(0)
+#define B_AX_WCPU_EN                      BIT(1)
+#define B_AX_APB_WRAP_EN                  BIT(2)
 
 #define R_AX_WLLPS_CTRL                   0x0090
 #define B_AX_DIS_WLBT_LPSEN_LOPC          BIT(1)

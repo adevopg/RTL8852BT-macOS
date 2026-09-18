@@ -117,6 +117,16 @@ public:
 	static bool interruptFilter(OSObject *owner, IOFilterInterruptEventSource *src);
 	static void interruptOccurred(OSObject *owner, IOInterruptEventSource *src, int count);
 
+	/* FASE 2d-1 - modo descarga de firmware (RTL8852BT_fwdl.cpp) */
+	bool prepareFirmwareDownload();
+	void disableCpu();
+	void disableFwWatchdog();
+	bool enableCpuForDownload();
+	bool waitPathReady(bool h2cOrFwdl);
+	bool waitFirmwareReady();
+	u8   getFwdlStatus();
+	void write16Mask(u32 addr, u16 mask, u16 v);
+
 private:
 	bool mapBar();
 	void unmapBar();
@@ -138,6 +148,8 @@ private:
 	bool fPoweredOn = false;
 	bool fEfuseRead = false;
 	bool fDmaReady = false;
+	bool fFwdlReady = false;
+	bool fFwReady = false;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;

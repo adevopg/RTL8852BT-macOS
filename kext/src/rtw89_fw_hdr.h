@@ -50,6 +50,21 @@ enum rtw89_fw_type {
 	RTW89_FW_LOGFMT = 255,
 };
 
+/* Estado de la descarga, en B_AX_WCPU_FWDL_STS_MASK (fw.h:10) */
+enum rtw89_fwdl_check_type {
+	RTW89_FWDL_INITIAL_STATE = 0,
+	RTW89_FWDL_FWDL_ONGOING = 1,
+	RTW89_FWDL_CHECKSUM_FAIL = 2,
+	RTW89_FWDL_SECURITY_FAIL = 3,
+	RTW89_FWDL_CV_NOT_MATCH = 4,
+	RTW89_FWDL_RSVD0 = 5,
+	RTW89_FWDL_WCPU_FWDL_RDY = 6,
+	RTW89_FWDL_WCPU_FW_INIT_RDY = 7
+};
+
+/* fw.h:5358 - vueltas de 1 us esperando al chip */
+#define FWDL_WAIT_CNT 400000
+
 /* Cabecera de cada firmware individual (v0, la que usa 8852BT) ------------- */
 struct rtw89_fw_hdr_section {
 	__le32 w0;

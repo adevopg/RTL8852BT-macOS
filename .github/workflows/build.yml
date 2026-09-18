@@ -202,56 +202,61 @@ jobs:
       - name: Compilar
         run: cd kext && make
 
-      - name: kmutil libraries - el sustituto moderno de kextlibs
+      - name: Resolucion de simbolos contra el kernel (kmutil libraries)
         run: |
-          KEXT=kext/build/RTL8852BT.kext
-          echo "kextlibs busca en /System/Library/Extensions, que en macOS"
-          echo "moderno esta practicamente vacio: los KPI viven ahora en"
-          echo "/System/Library/KernelCollections/*.kc. Por eso decia que no"
-          echo "encontraba NINGUNO de los 296 simbolos."
-          ls /System/Library/Extensions | wc -l
-          ls /System/Library/KernelCollections/ 2>/dev/null || true
+          KEXT="$PWD/kext/build/RTL8852BT.kext"
+          echo "kextlibs busca en /System/Library/Extensions, que en macOS moderno"
+          echo "no contiene los KPI: viven en /System/Library/KernelCollections/*.kc."
+          echo "Por eso kextlibs decia '296 symbols not found': un falso positivo."
+          echo "El sustituto correcto es 'kmutil libraries'."
           echo
-          echo "=== ayuda ==="
-          kmutil libraries --help 2>&1 | head -25 || true
+          kmutil libraries --xml -p "$KEXT" 2>&1 | tee /tmp/libs.txt
           echo
-          echo "=== resolucion real de simbolos ==="
-          kmutil libraries --xml -p "$KEXT" 2>&1 | tee /tmp/libs.txt | head -40 || true
           echo "===== veredicto ====="
-          if grep -qiE "not found|unresolved|missing" /tmp/libs.txt; then
-            echo "Quedan simbolos sin resolver. Revisar OSBundleLibraries."
-          elif grep -q "com.apple.kpi" /tmp/libs.txt; then
-            echo "RESUELTO: kmutil encuentra las librerias que necesita el kext."
-          else
-            echo "Salida inesperada, revisar arriba."
+          if grep -qiE "not found|unresolved|missing|error" /tmp/libs.txt; then
+            echo "FALLO: quedan simbolos sin resolver."
+            exit 1
           fi
+          for lib in com.apple.kpi.iokit com.apple.kpi.libkern com.apple.iokit.IOPCIFamily; do
+            grep -q "$lib" /tmp/libs.txt || { echo "FALLO: no resuelve $lib"; exit 1; }
+          done
+          echo "RESUELTO: macOS encuentra todas las librerias que el kext necesita."
 
-      - name: Por que kmutil cree que el kext no tiene codigo
+      - name: El binario tiene codigo de verdad (no es un kext codeless)
         run: |
           KEXT="$PWD/kext/build/RTL8852BT.kext"
           BIN="$KEXT/Contents/MacOS/RTL8852BT"
-          echo "kmutil dijo: 'only 1 codeless kexts provided'. Un kext codeless es"
-          echo "uno SIN binario. Si macOS lo viera asi, cargaria el bundle pero no"
-          echo "ejecutaria ni una linea. Hay que descartarlo."
+          fail=0
+
+          echo "=== CFBundleExecutable coincide con el fichero ==="
+          EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$KEXT/Contents/Info.plist")
+          test -f "$KEXT/Contents/MacOS/$EXE" || { echo "FALLO: no existe MacOS/$EXE"; fail=1; }
+          echo "  $EXE ok"
+
+          echo "=== tipo de Mach-O: debe ser KEXTBUNDLE ==="
+          otool -hv "$BIN" | tee /tmp/hdr.txt | tail -2
+          grep -q "KEXTBUNDLE" /tmp/hdr.txt || { echo "FALLO: no es un kext bundle"; fail=1; }
+          grep -q "X86_64" /tmp/hdr.txt || { echo "FALLO: no es x86_64"; fail=1; }
+
+          echo "=== simbolos de arranque DEFINIDOS (D), no indefinidos (U) ==="
+          nm "$BIN" | grep -E " D (_kmod_info|__realmain|__antimain|__kext_apple_cc)" | tee /tmp/kmod.txt
+          for sym in _kmod_info __realmain __antimain __kext_apple_cc; do
+            grep -qE " D $sym$" /tmp/kmod.txt || { echo "FALLO: $sym no esta definido"; fail=1; }
+          done
+
+          echo "=== hay codigo ejecutable en __text ==="
+          size -m "$BIN" | tee /tmp/size.txt | grep -E "__text|__mod_init_func"
+          TEXT=$(awk '/Section __text:/ {print $3}' /tmp/size.txt)
+          if [ "${TEXT:-0}" -lt 1000 ]; then
+            echo "FALLO: __text solo tiene ${TEXT:-0} bytes; el kext no lleva codigo."
+            fail=1
+          else
+            echo "  __text: $TEXT bytes de codigo"
+          fi
+
           echo
-          echo "=== existe el binario y coincide con CFBundleExecutable? ==="
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$KEXT/Contents/Info.plist"
-          ls -l "$KEXT/Contents/MacOS/"
-          echo
-          echo "=== tipo de Mach-O (debe ser KEXT_BUNDLE) ==="
-          otool -hv "$BIN"
-          echo
-          echo "=== arquitecturas presentes ==="
-          lipo -info "$BIN" || true
-          echo
-          echo "=== _kmod_info debe estar DEFINIDO (letra D/S), no indefinido (U) ==="
-          nm "$BIN" | grep -iE "kmod_info|realmain|antimain|kext_apple_cc" || echo "NO APARECE (problema)"
-          echo
-          echo "=== secciones: debe existir __TEXT con codigo ==="
-          size -m "$BIN" 2>/dev/null | head -20 || otool -l "$BIN" | grep -A3 "segname __TEXT" | head -12
-          echo
-          echo "=== que dice kmutil inspect del bundle ==="
-          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -25 || true
-          echo
-          echo "=== kmutil find, que es como el sistema descubre kexts ==="
-          kmutil find -e -p "$KEXT" 2>&1 | head -20 || true
+          if [ "$fail" -ne 0 ]; then
+            echo "El kext NO es cargable tal cual."
+            exit 1
+          fi
+          echo "OK: binario correcto, con codigo y con punto de entrada."

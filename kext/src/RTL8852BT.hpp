@@ -155,6 +155,18 @@ public:
 	bool allocH2CBuffers();
 	void freeH2CBuffers();
 
+	/* FASE 3a - encender la radio (RTL8852BT_rf.cpp) */
+	bool setupRadio();
+	bool enableBbRf();
+	bool disableBbRf();
+	u8   readThermal(u8 path);
+	u32  phyRead32(u32 addr);
+	void phyWrite32(u32 addr, u32 v);
+	u32  phyRead32Mask(u32 addr, u32 mask);
+	void phyWrite32Mask(u32 addr, u32 mask, u32 v);
+	u32  rfRead(u8 path, u32 addr, u32 mask);
+	bool rfWrite(u8 path, u32 addr, u32 mask, u32 data);
+
 private:
 	bool mapBar();
 	void unmapBar();
@@ -184,6 +196,10 @@ private:
 	rtw89_ring fH2CBuf[H2C_BUF_COUNT];
 	u32 fH2CBufNext = 0;
 	u8  fH2CSeq = 0;
+
+	/* FASE 3a */
+	bool fBbRfOn = false;
+	bool fRadioReady = false;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;

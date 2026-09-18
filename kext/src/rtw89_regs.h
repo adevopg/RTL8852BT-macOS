@@ -153,6 +153,40 @@
 #define XTAL_SI_SRAM_CTRL                 0xA1
 #define XTAL_SI_SRAM_DIS                  BIT(1)
 
+/* ---- Banda base y radiofrecuencia (FASE 3) ------------------------------ */
+#define R_AX_AFE_OFF_CTRL1                0x0444
+#define B_AX_S1_LDO_VSEL_F_MASK           GENMASK(25, 24)
+#define B_AX_S0_LDO_VSEL_F_MASK           GENMASK(22, 21)
+
+#define R_AX_PHYREG_SET                   0x8040
+#define PHYREG_SET_XYN_CYCLE              0xE
+
+/* Offsets del bus xtal_si para los dos caminos de radio */
+#define XTAL_SI_WL_RFC_S0                 0x80
+#define XTAL_SI_RF00S_EN                  GENMASK(2, 0)
+#define XTAL_SI_WL_RFC_S1                 0x81
+#define XTAL_SI_RF10S_EN                  GENMASK(2, 0)
+#define FULL_BIT_MASK                     GENMASK(7, 0)
+
+/* Las cuatro constantes siguientes NO son #define en el driver Linux: salen de
+ * campos de estructura, asi que tools/verify_regs.py las marca como 'sin origen'.
+ * Es correcto, no un error.
+ * Acceso a los registros de la PHY: desplazados 0x10000 (phy.c:9042 .cr_base) */
+#define RTW89_PHY_CR_BASE                 0x10000
+
+/* Registros de radio: direccionamiento directo, una base por camino
+ * (rtw8852bt.c:830 .rf_base_addr = {0xe000, 0xf000}) */
+#define RTW89_RF_BASE_PATH_A              0xe000
+#define RTW89_RF_BASE_PATH_B              0xf000
+#define RTW89_RF_PATH_NUM                 2
+#define RFREG_MASK                        0xfffff
+#define INV_RF_DATA                       0xffffffff
+
+/* Termometro interno del chip (core.h:8635) */
+#define RR_TM                             0x42
+#define RR_TM_TRI                         BIT(19)
+#define RR_TM_VAL                         GENMASK(6, 1)
+
 /* ---- Habilitacion de funciones DMAC / CMAC ------------------------------- */
 #define R_AX_DMAC_FUNC_EN                 0x8400
 #define B_AX_MAC_FUNC_EN                  BIT(30)

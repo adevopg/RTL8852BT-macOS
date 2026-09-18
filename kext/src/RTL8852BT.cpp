@@ -110,7 +110,11 @@ bool RTL8852BT::start(IOService *provider)
 			} else {
 				fFwdlReady = true;
 				/* FASE 2d-2: el hito. Enviar el firmware de verdad. */
-				downloadFirmware();
+				if (downloadFirmware()) {
+					/* FASE 3a: con el firmware dentro, encender la radio */
+					if (!setupRadio())
+						RTLOG("FASE 3a FALLO: la radio no respondio.");
+				}
 			}
 		} else {
 			RTLOG("FASE 2d-1 omitida: el firmware aun no estaba validado.");
@@ -118,9 +122,10 @@ bool RTL8852BT::start(IOService *provider)
 	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d fwRun=%d.",
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d fwdl=%d fwRun=%d radio=%d.",
 	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0,
-	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0, fFwReady ? 1 : 0);
+	      fDmaReady ? 1 : 0, fFwdlReady ? 1 : 0, fFwReady ? 1 : 0,
+	      fRadioReady ? 1 : 0);
 	return true;
 
 fail:
@@ -133,6 +138,7 @@ fail:
 void RTL8852BT::stop(IOService *provider)
 {
 	RTLOG("stop");
+	disableBbRf();
 	teardownDma();
 	if (fPoweredOn)
 		powerOff();

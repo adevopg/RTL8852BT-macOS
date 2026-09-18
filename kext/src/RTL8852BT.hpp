@@ -21,6 +21,7 @@
 #include "rtw89_compat.h"
 #include "rtw89_fw_hdr.h"
 #include "rtw89_regs.h"
+#include "rtw89_efuse_8852bt.h"
 
 #define DRV_NAME "RTL8852BT"
 #define RTLOG(fmt, ...) IOLog(DRV_NAME ": " fmt "\n", ##__VA_ARGS__)
@@ -72,6 +73,16 @@ public:
 	bool readXtalSi(u8 offset, u8 *out);
 	bool pollReg32(u32 addr, u32 mask, bool waitSet,
 	               u32 sleepUs, u32 timeoutUs, u32 *lastVal);
+	void write16Set(u32 addr, u16 bits);
+	void write16Clr(u32 addr, u16 bits);
+
+	/* FASE 2c - efuse: direccion MAC y calibracion (RTL8852BT_efuse.cpp) */
+	bool readEfuse();
+	bool dumpPhysicalEfuse(u8 *map, u32 dumpAddr, u32 dumpSize);
+	bool dumpLogicalEfuse(const u8 *phyMap, u8 *logMap);
+	bool parseEfuseMap(const u8 *logMap);
+	void enableEfusePwrCut();
+	void disableEfusePwrCut();
 
 private:
 	bool mapBar();
@@ -92,10 +103,16 @@ private:
 	u8  fChipCv = 0;
 	u8  fChipAcv = 0;
 	bool fPoweredOn = false;
+	bool fEfuseRead = false;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;
 	bool fEfusePowerKValid = false;
+	/* Rellenados por la fase 2c */
+	u8  fMacAddr[ETH_ALEN] = {};
+	u8  fRfeType = 0;
+	u8  fXtalCap = 0;
+	char fCountry[2] = {};
 
 	/* Copia del firmware en memoria del kernel (se libera en stop) */
 	u8  *fFwData = nullptr;

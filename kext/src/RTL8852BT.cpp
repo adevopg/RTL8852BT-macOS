@@ -82,12 +82,20 @@ bool RTL8852BT::start(IOService *provider)
 
 	/* FASE 2a: encender el MAC. Si falla, el kext sigue cargado para que
 	 * los registros se puedan inspeccionar desde el log. */
-	if (!powerOn())
+	if (!powerOn()) {
 		RTLOG("FASE 2a FALLO: el MAC no se encendio. Fase 1 sigue valida.");
+	} else {
+		/* FASE 2c: la efuse se lee por registros, no necesita DMA, asi que
+		 * va justo despues del encendido. Da la MAC, que es contrastable. */
+		if (!readEfuse())
+			RTLOG("FASE 2c FALLO: no se pudo leer la efuse.");
+		else
+			fEfuseRead = true;
+	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d. NO hay WiFi aun.",
-	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0);
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d. NO hay WiFi aun.",
+	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0);
 	return true;
 
 fail:

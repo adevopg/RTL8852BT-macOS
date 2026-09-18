@@ -36,6 +36,21 @@
 #define B_AX_APFM_OFFMAC                  BIT(9)
 #define B_AX_APFN_ONMAC                   BIT(8)
 
+/* Efuse: memoria de un solo uso con la MAC y la calibracion (efuse.c) */
+#define R_AX_SYS_WL_EFUSE_CTRL            0x000A
+#define B_AX_AUTOLOAD_SUS                 BIT(5)
+
+#define R_AX_EFUSE_CTRL                   0x0030
+#define B_AX_EF_MODE_SEL_MASK             GENMASK(31, 30)
+#define B_AX_EF_RDY                       BIT(29)
+#define B_AX_EF_ADDR_MASK                 GENMASK(26, 16)
+#define B_AX_EF_DATA_MASK                 GENMASK(15, 0)
+
+#define R_AX_EFUSE_CTRL_1                 0x0038
+#define B_AX_EF_CELL_SEL_MASK             GENMASK(9, 8)
+#define R_AX_EFUSE_CTRL_1_V1              0x0038
+#define B_AX_EF_BURST                     BIT(19)
+
 #define R_AX_SYS_SWR_CTRL1                0x0010
 #define B_AX_SYM_CTRL_SPS_PWMFREQ         BIT(10)
 

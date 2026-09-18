@@ -571,3 +571,28 @@ Se honesto contigo mismo sobre que esta probado:
 
 Nada de lo que hay en `kext/` ha tocado hardware real todavia. El primer paso del guion
 es cambiar eso.
+
+---
+
+## 11. Diario de pruebas en el hardware
+
+### 18/09/2026 — primeras pruebas con OpenCore instalado en la particion EFI del disco
+
+| Prueba | Cambio | Hasta donde llega |
+|---|---|---|
+| 1 | configuracion inicial | el cargador de macOS falla al reservar memoria (`EB.MM.AKM`, `EB|STOP 0x16`) |
+| 2 | `DevirtualiseMmio` + OpenCore DEBUG + SSDT corregido | **entrega el control al kernel** (`EXITBS:START`) y ahi se queda |
+| 3 | `SetupVirtualMap` desactivado | pendiente |
+
+**Hito de la prueba 2:** `OC: Prelinked injection RTL8852BT.kext (com.poveda.driver.RTL8852BT) - Success`.
+Primera confirmacion en hardware real de que macOS acepta el kext dentro de su coleccion
+del kernel. Los 14 parches de AMD tambien se aplican con `Success`.
+
+El driver aun no se ha ejecutado: se carga cuando el kernel ya esta en marcha, y el kernel
+todavia no arranca en este equipo. El bloqueo actual es de arranque de macOS en un Zen 5
+(Ryzen AI 7 350, familia 0x1A) con firmware Insyde de HP, no del driver.
+
+Error mio encontrado en la prueba 1: el `SSDT-EC-USBX-LAPTOP.aml` descargado era una pagina
+HTML de error de GitHub. Sustituido por la muestra oficial de OpenCore con `LPCB` cambiado a
+`LPC0`, que es el nombre real del bus en este portatil (`\_SB.PCI0.LPC0.EC0`, sacado de
+Windows), y la suma de comprobacion ACPI recalculada.

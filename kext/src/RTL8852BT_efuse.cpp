@@ -116,7 +116,7 @@ bool RTL8852BT::dumpLogicalEfuse(const u8 *phyMap, u8 *logMap)
 		if (invalid_efuse_header(hdr1, hdr2))
 			break;   /* 0xff = fin de los datos grabados */
 
-		u8 blkIdx = get_efuse_blk_idx(hdr1, hdr2);
+		u8 blkIdx = (u8)get_efuse_blk_idx(hdr1, hdr2);
 		u8 wordEn = (u8)(hdr2 & 0xf);
 		phyIdx += 2;
 

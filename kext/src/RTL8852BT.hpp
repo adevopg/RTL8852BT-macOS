@@ -15,13 +15,19 @@
  * con -Wno-deprecated-declarations. */
 #include <IOKit/pci/IOPCIDevice.h>
 #include <IOKit/IOMemoryDescriptor.h>
+#include <IOKit/IOBufferMemoryDescriptor.h>
+#include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOLib.h>
 #include <libkern/OSKextLib.h>
+
+class IOWorkLoop;
+class IOFilterInterruptEventSource;
 
 #include "rtw89_compat.h"
 #include "rtw89_fw_hdr.h"
 #include "rtw89_regs.h"
 #include "rtw89_efuse_8852bt.h"
+#include "rtw89_pci_desc.h"
 
 #define DRV_NAME "RTL8852BT"
 #define RTLOG(fmt, ...) IOLog(DRV_NAME ": " fmt "\n", ##__VA_ARGS__)
@@ -31,6 +37,18 @@
 /* Versiones de silicio (enum rtw89_core_chip_cv en core.h) */
 enum rtw89_chip_cv {
 	CHIP_CAV = 0, CHIP_CBV, CHIP_CCV, CHIP_CDV, CHIP_CEV, CHIP_CFV,
+};
+
+/* Un anillo de descriptores compartido con el chip. */
+struct rtw89_ring {
+	IOBufferMemoryDescriptor *buf = nullptr;
+	u8  *virt     = nullptr;   /* como lo ve el kernel */
+	u32  phys     = 0;         /* como lo ve el chip (siempre < 4 GB) */
+	u32  numDesc  = 0;
+	u32  descSize = 0;
+	u32  bytes    = 0;
+	u32  wp       = 0;         /* indice del host */
+	u32  rp       = 0;         /* indice del hardware */
 };
 
 struct rtw89_fw_bin_summary {
@@ -84,6 +102,21 @@ public:
 	void enableEfusePwrCut();
 	void disableEfusePwrCut();
 
+	/* FASE 2b - anillos DMA e interrupciones (RTL8852BT_pci.cpp) */
+	bool setupDma();
+	void teardownDma();
+	bool allocRings();
+	void freeRings();
+	bool allocRing(struct rtw89_ring *ring, u32 numDesc, u32 descSize, const char *name);
+	void freeRing(struct rtw89_ring *ring);
+	void programRings();
+	bool setupInterrupt();
+	void teardownInterrupt();
+	void enableInterrupts();
+	void disableInterrupts();
+	static bool interruptFilter(OSObject *owner, IOFilterInterruptEventSource *src);
+	static void interruptOccurred(OSObject *owner, IOInterruptEventSource *src, int count);
+
 private:
 	bool mapBar();
 	void unmapBar();
@@ -104,6 +137,7 @@ private:
 	u8  fChipAcv = 0;
 	bool fPoweredOn = false;
 	bool fEfuseRead = false;
+	bool fDmaReady = false;
 	/* FASE 2c leera la efuse de verdad; hasta entonces se asume invalida,
 	 * lo que hace que powerOn() omita el ajuste del regulador. */
 	bool fEfuseValid = false;
@@ -113,6 +147,15 @@ private:
 	u8  fRfeType = 0;
 	u8  fXtalCap = 0;
 	char fCountry[2] = {};
+
+	/* FASE 2b */
+	rtw89_ring fTxRing[RTW8852BT_TXCH_COUNT];
+	rtw89_ring fRxRing[RTW8852BT_RXCH_COUNT];
+	bool fRingsAllocated = false;
+	IOWorkLoop *fWorkLoop = nullptr;
+	IOFilterInterruptEventSource *fIntSource = nullptr;
+	volatile u64 fIrqCount = 0;
+	volatile u32 fLastHisr00 = 0, fLastHisr10 = 0, fLastHisr0 = 0;
 
 	/* Copia del firmware en memoria del kernel (se libera en stop) */
 	u8  *fFwData = nullptr;

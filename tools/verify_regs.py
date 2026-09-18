@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""verify_regs.py - comprueba que kext/src/rtw89_regs.h coincide con el driver Linux.
+"""verify_regs.py - comprueba que nuestros mapas de registros coinciden con Linux.
 
 Uso:  python tools/verify_regs.py
 
 Un solo bit mal transcrito en la secuencia de encendido hace que el chip no
 arranque, y depurarlo desde el log es casi imposible. Este script compara cada
-#define de rtw89_regs.h contra reference/rtw89-linux/reg.h y mac.h, evaluando
+#define de rtw89_regs.h y rtw89_pci_regs.h contra reg.h, mac.h, core.h, pci.h
+y txrx.h del driver Linux, evaluando
 BIT() y GENMASK() de verdad, y avisa de:
 
   - valores que no coinciden con el original
@@ -19,11 +20,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OURS = ROOT / "kext" / "src" / "rtw89_regs.h"
+OURS_FILES = [ROOT / "kext" / "src" / "rtw89_regs.h",
+              ROOT / "kext" / "src" / "rtw89_pci_regs.h"]
 LINUX_DIR = ROOT / "reference" / "rtw89-linux"
-LINUX_FILES = ["reg.h", "mac.h", "core.h"]
+LINUX_FILES = ["reg.h", "mac.h", "core.h", "pci.h", "txrx.h"]
 USERS = [ROOT / "kext" / "src" / "RTL8852BT_power.cpp",
-         ROOT / "kext" / "src" / "RTL8852BT.cpp"]
+         ROOT / "kext" / "src" / "RTL8852BT.cpp",
+         ROOT / "kext" / "src" / "RTL8852BT_efuse.cpp",
+         ROOT / "kext" / "src" / "RTL8852BT_pci.cpp"]
 
 DEFINE_RE = re.compile(r"^\s*#define\s+([A-Za-z_][A-Za-z0-9_]*)\s+(.+?)\s*$")
 ENUM_RE = re.compile(r"^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(0x[0-9a-fA-F]+|\d+)\s*,?\s*$")
@@ -76,10 +80,12 @@ def parse_defines(path: Path):
 
 
 def main():
-    if not OURS.is_file():
-        sys.exit(f"ERROR: no encuentro {OURS}")
-
-    ours = parse_defines(OURS)
+    ours = {}
+    for f in OURS_FILES:
+        if not f.is_file():
+            sys.exit(f"ERROR: no encuentro {f}")
+        for k, v in parse_defines(f).items():
+            ours.setdefault(k, v)
     theirs = {}
     src_of = {}
     for fn in LINUX_FILES:
@@ -92,7 +98,7 @@ def main():
                 theirs[name] = info
                 src_of[name] = fn
 
-    print(f"rtw89_regs.h: {len(ours)} defines")
+    print(f"nuestros headers: {len(ours)} defines de {len(OURS_FILES)} ficheros")
     print(f"driver Linux: {len(theirs)} defines en {', '.join(LINUX_FILES)}")
     print()
 
@@ -118,7 +124,7 @@ def main():
     if missing:
         print(f"NO ENCONTRADOS en el driver Linux ({len(missing)}):")
         for name, val, expr, lineno in missing:
-            print(f"  {name:34s} = {expr:24s} (rtw89_regs.h:{lineno})")
+            print(f"  {name:34s} = {expr:24s} (linea {lineno})")
         print("  Revisa si son constantes propias o nombres mal escritos.")
         print()
 

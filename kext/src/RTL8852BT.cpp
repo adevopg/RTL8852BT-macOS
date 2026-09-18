@@ -91,11 +91,19 @@ bool RTL8852BT::start(IOService *provider)
 			RTLOG("FASE 2c FALLO: no se pudo leer la efuse.");
 		else
 			fEfuseRead = true;
+
+		/* FASE 2b: anillos DMA e interrupciones. Va despues de la efuse
+		 * porque esta solo necesita registros, y asi un fallo de DMA no
+		 * impide conocer la MAC. */
+		if (!setupDma())
+			RTLOG("FASE 2b FALLO: no se pudieron preparar los anillos DMA.");
+		else
+			fDmaReady = true;
 	}
 
 	registerService();
-	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d. NO hay WiFi aun.",
-	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0);
+	RTLOG("arranque terminado. poweredOn=%d fwValid=%d efuse=%d dma=%d. NO hay WiFi aun.",
+	      fPoweredOn ? 1 : 0, fFwValid ? 1 : 0, fEfuseRead ? 1 : 0, fDmaReady ? 1 : 0);
 	return true;
 
 fail:
@@ -108,6 +116,7 @@ fail:
 void RTL8852BT::stop(IOService *provider)
 {
 	RTLOG("stop");
+	teardownDma();
 	if (fPoweredOn)
 		powerOff();
 	unmapBar();

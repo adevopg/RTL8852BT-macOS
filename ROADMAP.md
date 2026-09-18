@@ -278,13 +278,30 @@ Si coincide, queda validada de golpe la cadena entera: mapeo de BAR, encendido d
 y acceso a registros. El codigo ya rechaza una MAC de todo `FF` (efuse en blanco o sin
 alimentar), de todo ceros (no se leyo nada) o con el bit multicast puesto.
 
-### 4.4 FASE 2d — Descargar el firmware al chip (PENDIENTE)
+### 4.4 FASE 2d — Descargar el firmware al chip (MITAD ESCRITA)
 
 **Fuente:** `fw.c` → `rtw89_fw_download`, `rtw89_fw_download_hdr`, `rtw89_fw_download_main`
 
-El firmware ya se valida en fase 1; aqui se **envia** al chip por H2C sobre DMA, seccion
-a seccion, a las direcciones que trae la cabecera (0xb8970000, 0xb8e12c00, 0xb8e116a0),
-en paquetes de `FWDL_SECTION_PER_PKT_LEN` = 2020 bytes.
+El chip lleva dentro su propio procesador, el WCPU, que es quien ejecuta el firmware.
+
+**Parte 1, ya escrita** (`kext/src/RTL8852BT_fwdl.cpp`): parar el WCPU, ponerlo en modo
+descarga y esperar a que abra el camino. Es solo escritura de registros, y se puede
+comprobar sola: si el chip abre el camino, el procesador esta vivo y responde.
+
+Criterio de aceptacion de la parte 1:
+
+```
+RTL8852BT: fwdl: camino de descarga abierto. Estado 'listo para recibir firmware' (6)
+RTL8852BT: FASE 2d-1 lista: el chip espera el firmware.
+```
+
+El log traduce el estado a palabras, porque los fallos que se veran aqui (checksum,
+seguridad, version de chip que no coincide) son incomprensibles como numero suelto.
+
+**Parte 2, pendiente:** enviar los bytes por H2C sobre DMA, seccion a seccion, a las
+direcciones que trae la cabecera (0xb8970000, 0xb8e12c00, 0xb8e116a0), en paquetes de
+`FWDL_SECTION_PER_PKT_LEN` = 2020 bytes. Necesita el camino de transmision del canal
+CH12 funcionando sobre los anillos de la fase 2b.
 
 **Criterio de aceptacion:** el chip contesta un C2H de `fwdl` con estado OK, y
 `R_AX_WCPU_FW_CTRL` indica firmware listo. Equivale a `RTW89_FLAG_FW_RDY` en Linux.
@@ -392,7 +409,8 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [AHORA]     ---- PROBAR el kext en el portatil con el USB de OpenCore ----
 [HECHO]     Fase 2c  efuse: MAC address                 (efuse.c)
 [HECHO]     Fase 2b  anillos DMA + interrupciones      (pci.c)
-[SIGUIENTE] Fase 2d  descarga de firmware al chip       (fw.c)   <- hito clave
+[HECHO]     Fase 2d-1 modo descarga de firmware         (mac.c)
+[SIGUIENTE] Fase 2d-2 enviar el firmware por H2C        (fw.c)   <- hito clave
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)
             Fase 5   IO80211Family / AirportItlwm

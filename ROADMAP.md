@@ -588,7 +588,8 @@ es cambiar eso.
 | 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | **pasa el panic**; cargan VirtualSMC, RestrictEvents y 36 tablas ACPI (incluido nuestro SSDT); se para al arrancar IOPCIFamily |
 | 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | mismo sitio: `npci` no era la causa |
 | 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | ninguna linea `[PCIe:`: se cuelga antes de leer el puente raiz |
-| 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | pendiente |
+| 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | **macOS reconoce los 16 hilos** (`AppleACPICPU ... Enabled`) y pasa el cuelgue; pantalla negra (normal durante la configuracion PCI) y reinicio brusco a los pocos segundos |
+| 10 | `cpus=1` (diagnostico: un solo hilo) | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -628,3 +629,13 @@ ACPI. Desde Windows se ve que el firmware declara los 16 hilos como `Device (C00
 con `_HID "ACPI0007"` en `\_SB.PLTF` y ningun `Processor`, que es lo unico que macOS
 reconoce. Arreglo, como `SSDT-CPUR` en AMD B550/A520: `opencore/ACPI/SSDT-CPUR-OMNI.dsl`,
 16 `Processor` con ProcId y `_UID` 0..15, que coinciden con la MADT del firmware.
+
+**Prueba 9.** El SSDT funciona: `AppleACPICPU: ProcessorId=0..15 LocalApicId=0..15 Enabled`.
+La pantalla negra es normal: `IOPCIConfigurator::configure()` llama a
+`setConsoleInfo(0, kPEDisableScreen)` durante la configuracion PCI. El error
+`[_PRR] AE_ALREADY_EXISTS` es de la BIOS (SSDT-15 redeclara `_PRR` en
+`\_SB.PCI0.GPPC.XHC0.RHUB.PRT5`) y es inofensivo. Lo nuevo es el reinicio: unos 6 segundos
+entre `EXITBS:START` y el siguiente arranque de OpenCore, sin panic. Es lo esperable si
+falla el arranque de los nucleos secundarios en un Zen 5 hibrido (4 Zen 5 + 4 Zen 5c),
+que hasta ahora macOS no intentaba porque no veia ningun procesador.
+La prueba 10 (`cpus=1`) separa las dos hipotesis: nucleos o configuracion PCI.

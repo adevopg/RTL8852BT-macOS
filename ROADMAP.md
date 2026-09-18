@@ -582,7 +582,14 @@ es cambiar eso.
 |---|---|---|
 | 1 | configuracion inicial | el cargador de macOS falla al reservar memoria (`EB.MM.AKM`, `EB|STOP 0x16`) |
 | 2 | `DevirtualiseMmio` + OpenCore DEBUG + SSDT corregido | **entrega el control al kernel** (`EXITBS:START`) y ahi se queda |
-| 3 | `SetupVirtualMap` desactivado | pendiente |
+| 3 | `SetupVirtualMap` desactivado | **el kernel arranca** (Darwin 25.6.0) y da panic a los 0,34 s |
+| 4 | `MmioWhitelist 0x80000000` | pendiente |
+
+**Panic de la prueba 3, leido del video:** page fault en codigo del firmware al leer
+`0xFF0CC04C`, la ventana de la flash donde vive la NVRAM, que `DevirtualiseMmio` habia
+quitado del mapa. **No es nuestro driver:** no esta en el backtrace, la instruccion que
+falla esta fuera de la coleccion de kexts (68 MB; el fallo esta a 78,8 MB de su inicio) y
+ocurre antes de que arranque ningun driver.
 
 **Hito de la prueba 2:** `OC: Prelinked injection RTL8852BT.kext (com.poveda.driver.RTL8852BT) - Success`.
 Primera confirmacion en hardware real de que macOS acepta el kext dentro de su coleccion

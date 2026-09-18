@@ -103,7 +103,7 @@ const u8 *RTL8852BT::findElement(u32 wantedId, u32 *outCount, u8 *outIdx)
 		return nullptr;
 	const rtw89_mfw_info *last = &mfw->info[mfw->fw_nr - 1];
 	u32 off = le32_to_cpu(last->shift) + le32_to_cpu(last->size);
-	off = (off + RTW89_FW_ELEMENT_ALIGN - 1) & ~(RTW89_FW_ELEMENT_ALIGN - 1);
+	off = (off + RTW89_FW_ELEMENT_ALIGN - 1) & ~(u32)(RTW89_FW_ELEMENT_ALIGN - 1);
 
 	while (off + sizeof(rtw89_fw_element_hdr) <= fFwLen) {
 		const rtw89_fw_element_hdr *h =
@@ -126,7 +126,7 @@ const u8 *RTL8852BT::findElement(u32 wantedId, u32 *outCount, u8 *outIdx)
 		}
 
 		off += sizeof(rtw89_fw_element_hdr) + size;
-		off = (off + RTW89_FW_ELEMENT_ALIGN - 1) & ~(RTW89_FW_ELEMENT_ALIGN - 1);
+		off = (off + RTW89_FW_ELEMENT_ALIGN - 1) & ~(u32)(RTW89_FW_ELEMENT_ALIGN - 1);
 	}
 	return nullptr;
 }

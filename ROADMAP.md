@@ -587,7 +587,8 @@ es cambiar eso.
 | 5 | `AllowRelocationBlock` | activo pero OpenCore no lo usa; mismo fallo de memoria |
 | 6 | config de la prueba 3 + NVRAM emulada (`OpenVariableRuntimeDxe`) | **pasa el panic**; cargan VirtualSMC, RestrictEvents y 36 tablas ACPI (incluido nuestro SSDT); se para al arrancar IOPCIFamily |
 | 7 | quitar `npci=0x3000` (error mio: el firmware ya usa Above 4G) | mismo sitio: `npci` no era la causa |
-| 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | pendiente |
+| 8 | solo diagnostico: `pci_log_mode=0x2 pci_log=0x202` (registro de PCI en pantalla) | ninguna linea `[PCIe:`: se cuelga antes de leer el puente raiz |
+| 9 | `SSDT-CPUR-OMNI.aml`: 16 objetos `Processor` (el firmware solo tiene `Device ACPI0007`) + `SysReport` | pendiente |
 
 **Donde se cuelga (prueba 7, leido del codigo de IOPCIFamily-726.100.6):** la ultima linea,
 `pci (build ...)`, la escribe `IOPCIConfigurator::createRoot()`. Lo siguiente es
@@ -619,3 +620,11 @@ Error mio encontrado en la prueba 1: el `SSDT-EC-USBX-LAPTOP.aml` descargado era
 HTML de error de GitHub. Sustituido por la muestra oficial de OpenCore con `LPCB` cambiado a
 `LPC0`, que es el nombre real del bus en este portatil (`\_SB.PCI0.LPC0.EC0`, sacado de
 Windows), y la suma de comprobacion ACPI recalculada.
+
+**Prueba 8 y el SSDT de procesadores.** Con el registro de PCI activo no sale ni `root id`,
+lo primero que se escribe al leer el puente raiz. El cuelgue esta entre
+`IOPCIHostBridge::probe` y el inicio de `addHostBridge()`, en el arranque de la plataforma
+ACPI. Desde Windows se ve que el firmware declara los 16 hilos como `Device (C000..C00F)`
+con `_HID "ACPI0007"` en `\_SB.PLTF` y ningun `Processor`, que es lo unico que macOS
+reconoce. Arreglo, como `SSDT-CPUR` en AMD B550/A520: `opencore/ACPI/SSDT-CPUR-OMNI.dsl`,
+16 `Processor` con ProcId y `_UID` 0..15, que coinciden con la MADT del firmware.

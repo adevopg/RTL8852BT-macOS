@@ -228,28 +228,25 @@ jobs:
 
       - name: kmutil create - enlazar el kext de verdad (prueba definitiva)
         run: |
-          KEXT=kext/build/RTL8852BT.kext
-          echo "Si macOS puede ENLAZAR el kext dentro de una coleccion auxiliar,"
-          echo "entonces lo puede cargar. Es la comprobacion mas fuerte que hay"
-          echo "sin tener el hardware delante."
-          KERNEL=$(ls /System/Library/Kernels/kernel* 2>/dev/null | head -1)
-          echo "kernel: ${KERNEL:-no encontrado}"
-          set -x
-          sudo kmutil create -a x86_64 -z -n aux             --kext-path "$KEXT"             -B /tmp/aux.kc             -V release 2>&1 | tee /tmp/create.txt | head -50 || true
-          set +x
+          KEXT="$PWD/kext/build/RTL8852BT.kext"
+          echo "=== opciones completas de kmutil create ==="
+          kmutil create --help 2>&1 || true
+          echo
+          echo "Si macOS puede ENLAZAR el kext en una coleccion auxiliar, lo puede"
+          echo "cargar. Es la prueba mas fuerte que existe sin tener la tarjeta."
+          KC=/System/Library/KernelCollections
+          ls -l "$KC"
+          echo
+          echo "=== intento: coleccion auxiliar con -p / --aux-path ==="
+          sudo kmutil create -z -a x86_64 -V release -n aux             --boot-path "$KC/BootKernelExtensions.kc"             --system-path "$KC/SystemKernelExtensions.kc"             --aux-path /tmp/aux.kc             -p "$KEXT" 2>&1 | tee /tmp/create.txt || true
+          echo
           echo "===== veredicto ====="
           if [ -f /tmp/aux.kc ]; then
-            echo "ENLAZADO CORRECTAMENTE. macOS puede cargar este kext."
+            echo "ENLAZADO. macOS puede cargar este kext."
             ls -lh /tmp/aux.kc
-          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure" /tmp/create.txt; then
-            echo "FALLO DE ENLACE: hay simbolos que el kernel no da. Ver arriba."
+          elif grep -qiE "Symbol.*not found|Undefined symbol|link failure|could not resolve" /tmp/create.txt; then
+            echo "FALLO DE ENLACE: faltan simbolos de verdad. Ver arriba."
             exit 1
           else
-            echo "No concluyente. Salida completa:"
-            cat /tmp/create.txt
+            echo "No concluyente; salida completa arriba."
           fi
-
-      - name: Que sabe hacer kmutil en esta version
-        run: |
-          echo "=== kmutil create --help ==="
-          kmutil create --help 2>&1 | head -35 || true

@@ -32,7 +32,7 @@ con criterio de aceptacion y como verificar cada una bajo OpenCore.**
 | 0 | Identificar chip, PCI ID, firmware y fuente de referencia | HECHO |
 | 1 | Kext que se engancha al PCI 10EC:B520, mapea BAR2, lee la version del chip y carga/valida el firmware | COMPILA en CI. Sin probar en hardware |
 | 2a | Encendido y apagado del MAC + bus xtal_si (port de rtw8852bt_pwr_on_func) | COMPILA en CI. Los 105 registros verificados uno a uno |
-| 2b | Anillos DMA TX/RX e interrupciones (pci.c) | pendiente, ~3.900 lineas |
+| 2b | Anillos DMA TX/RX e interrupciones (pci.c) | COMPILA en CI. 7 canales TX + 2 RX, MSI |
 | 2c | Lectura de efuse: direccion MAC y calibracion (efuse.c) | COMPILA en CI. La MAC es contrastable con `getmac /v` de Windows |
 | 2d | Descarga del firmware al chip por H2C (fw.c) | pendiente. Hito clave del proyecto |
 | 3 | Init de PHY/BB/RF con las tablas de rtw8852bt (rtw8852b_table.c, 750 KB) | pendiente |

@@ -206,7 +206,7 @@ RTL8852BT: MAC encendido: DMAC_FUNC_EN=0x... CMAC_FUNC_EN=0x... IC_PWR_STATE=1
 **Si da timeout en `B_AX_RDY_SYSPWR`:** el chip no recibe alimentacion. Revisa si la
 BIOS de HP deja la tarjeta encendida cuando no hay driver de Windows cargado.
 
-### 4.2 FASE 2b — Anillos DMA y interrupciones (PENDIENTE, lo mas laborioso de la fase)
+### 4.2 FASE 2b — Anillos DMA y interrupciones (ESCRITA Y COMPILA, sin probar)
 
 **Fuente:** `reference/rtw89-linux/pci.c` (3.900 lineas), `pci.h`
 
@@ -219,13 +219,34 @@ Tareas:
    sobre el `IOPCIDevice`. MSI se pide con `fPci->setProperty("IOPCIMSIMode", ...)`.
 4. Puntero de escritura/lectura de cada anillo: `rtw89_pci_ops_reset`, `__rtw89_pci_tx_kick_off`.
 
-**Criterio de aceptacion:** una interrupcion recibida y contada en el log despues de
-`rtw89_pci_enable_intr`. Aun sin transmitir nada.
+**Ya implementada** en `kext/src/RTL8852BT_pci.cpp`. Alcance: reservar los anillos,
+decirle al chip donde estan y conseguir que llegue una interrupcion. NO transmite ni
+recibe todavia.
 
-**Trampa conocida:** macOS no garantiza memoria por debajo de 4 GB salvo que lo pidas.
-Si el chip esta en modo DAC de 32 bits (`rtw89_pci_cfg_dac`), tienes que forzar
-`kIOMemoryMapperNone` y mascara de 32 bits en el `IODMACommand`, o el DMA escribira
-en una direccion que el chip no puede alcanzar.
+Solo se montan los canales que el 8852BT usa de verdad. Su `pci_info` enmascara
+ACH4..ACH7, CH10 y CH11, asi que quedan siete de transmision y dos de recepcion.
+
+**Criterio de aceptacion.** En el log:
+
+```
+RTL8852BT: anillo ACH0   256 desc x 8 B = 2048 B  fisica 0x........
+   (nueve lineas, una por anillo)
+RTL8852BT: FASE 2b: los 9 anillos retienen su direccion. El chip sabe donde estan.
+RTL8852BT: MSI disponible en el indice N
+RTL8852BT: interrupcion registrada (indice N)
+RTL8852BT: interrupcion #1: HISR00=0x........ ...
+```
+
+La linea de los nueve anillos es la importante: despues de escribir cada direccion,
+el codigo la RELEE y compara. Si un anillo no retiene lo que le escribimos, el chip
+no lo esta viendo, y el log lo dice con nombre y valores en vez de fallar mas tarde.
+
+**La trampa de macOS, ya resuelta.** En Linux `dma_alloc_coherent` da memoria que el
+dispositivo puede alcanzar. En macOS hay que pedirlo: con memoria normal el sistema
+puede colocarla por encima de los 4 GB y el chip escribiria en una direccion que para
+el no existe, corrompiendo memoria ajena. Se usa `inTaskWithPhysicalMask` con mascara
+de 32 bits y `kIOMemoryPhysicallyContiguous`, y ademas se verifica a posteriori que la
+direccion cae de verdad bajo los 4 GB.
 
 ### 4.3 FASE 2c — Leer la efuse (ESCRITA Y COMPILA, sin probar)
 
@@ -370,8 +391,8 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     CI en GitHub Actions: compila el kext sin necesidad de Mac
 [AHORA]     ---- PROBAR el kext en el portatil con el USB de OpenCore ----
 [HECHO]     Fase 2c  efuse: MAC address                 (efuse.c)
-[SIGUIENTE] Fase 2b  anillos DMA + interrupciones      (pci.c)
-            Fase 2d  descarga de firmware al chip       (fw.c)   <- hito clave
+[HECHO]     Fase 2b  anillos DMA + interrupciones      (pci.c)
+[SIGUIENTE] Fase 2d  descarga de firmware al chip       (fw.c)   <- hito clave
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)
             Fase 5   IO80211Family / AirportItlwm

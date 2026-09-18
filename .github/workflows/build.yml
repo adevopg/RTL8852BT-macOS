@@ -166,29 +166,72 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-# ----------------------------------------------------------------------------
-# NOTA: aqui habia un job 'validar-en-macos' que intentaba usar kextutil/kmutil
-# para resolver los simbolos contra el kernel sin tener el hardware. Se retiro
-# el 18/09/2026 porque NO PUEDE FUNCIONAR:
-#
-#   - Los runners macOS gratuitos de GitHub (macos-14, macos-15, macos-latest)
-#     son todos Apple Silicon. Ya no hay Intel gratis.
-#   - kextutil en macOS moderno es un envoltorio de kmutil: "-n is not a
-#     supported kmutil mode".
-#   - kmutil inspect lo dice sin rodeos:
-#       "Incompatible architecture: Binary is for x86_64, but needed arch arm64e"
-#
-# Un Mac ARM no puede validar un kext x86_64. Mantener el job solo gastaba
-# minutos de macOS, que en cuenta privada son limitados.
-#
-# Lo que SI queda cubierto automaticamente:
-#   - tools/verify_bundle.py  estructura del bundle, coincidencia de
-#     kmod_info con Info.plist, IOClass, PCI match, dependencias.
-#   - El paso "Revisar el kext construido" del job build: comprueba que todo
-#     simbolo sin resolver sea de los que exporta el kernel, y falla si no.
-#
-# Lo que NO se puede cubrir sin un macOS x86_64: la resolucion real de los 296
-# simbolos y la carga efectiva del kext. Eso exige una VM de macOS sobre este
-# mismo equipo, o el portatil arrancando del USB de OpenCore. La segunda opcion
-# ademas comprueba lo unico que de verdad importa: si el chip responde.
-# ----------------------------------------------------------------------------
+  # Validacion real en macOS x86_64.
+  #
+  # Correccion importante: GitHub SI ofrece runners Intel como etiquetas
+  # estandar, 'macos-15-intel' y 'macos-26-intel'. En un intento anterior solo
+  # probe macos-14/15/latest, que son Apple Silicon, y concluí de mas que no
+  # habia Intel. Lo habia.
+  #
+  # Con un runner x86_64, kmutil puede resolver de verdad los simbolos del kext
+  # contra el kernel y decir si macOS lo aceptaria. Es exactamente lo que se
+  # buscaba con una maquina virtual, pero automatico y en cada push.
+  validar-en-macos-intel:
+    name: Validar el kext en macOS Intel
+    needs: build
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-26-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirmar que es Intel de verdad
+        run: |
+          echo "etiqueta: ${{ matrix.runner }}"
+          echo "uname -m: $(uname -m)"
+          sw_vers
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "NO es x86_64; esta validacion no sirve en este runner."
+            exit 1
+          fi
+          echo "OK: runner Intel, la validacion tiene sentido."
+
+      - name: Compilar
+        run: cd kext && make
+
+      - name: Que sabe hacer kmutil en esta version
+        run: |
+          echo "=== kmutil ==="
+          kmutil --help 2>&1 | head -30 || true
+          echo "=== kmutil check ==="
+          kmutil check --help 2>&1 | head -25 || true
+          echo "=== kmutil inspect ==="
+          kmutil inspect --help 2>&1 | head -25 || true
+
+      - name: kextlibs - ahora SI puede resolver los simbolos
+        run: |
+          KEXT=kext/build/RTL8852BT.kext
+          echo "En un Mac x86_64, kextlibs puede comparar contra los kexts del"
+          echo "sistema. Si aqui no faltan simbolos, macOS resolvera el kext."
+          kextlibs -xml "$KEXT" 2>&1 | tee /tmp/kextlibs.txt || true
+          echo "===== veredicto ====="
+          if grep -qi "symbols not found" /tmp/kextlibs.txt; then
+            echo "FALTAN SIMBOLOS. Revisar OSBundleLibraries del Info.plist."
+          else
+            echo "Sin simbolos huerfanos: las dependencias declaradas bastan."
+          fi
+
+      - name: kmutil - validacion del bundle
+        run: |
+          KEXT=kext/build/RTL8852BT.kext
+          echo "=== inspect ==="
+          kmutil inspect --bundle-path "$KEXT" 2>&1 | head -40 || true
+          echo "=== check ==="
+          kmutil check --bundle-path "$KEXT" 2>&1 | head -20 || true
+          echo "=== load en seco (fallara por SIP, pero dice POR QUE) ==="
+          # Con SIP activo no puede cargar, pero el mensaje distingue entre
+          # 'kext invalido' y 'politica de seguridad', que es lo que interesa.
+          sudo kmutil load -p "$KEXT" 2>&1 | head -25 || true

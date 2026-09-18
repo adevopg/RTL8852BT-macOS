@@ -36,7 +36,8 @@ con criterio de aceptacion y como verificar cada una bajo OpenCore.**
 | 2c | Lectura de efuse: direccion MAC y calibracion (efuse.c) | COMPILA en CI. La MAC es contrastable con `getmac /v` de Windows |
 | 2d-1 | Poner el chip en modo descarga de firmware (mac.c) | COMPILA en CI |
 | 2d-2 | Enviar el firmware por H2C sobre DMA (fw.c) | COMPILA en CI. Hito clave, sin probar |
-| 3 | Init de PHY/BB/RF con las tablas de rtw8852bt (rtw8852b_table.c, 750 KB) | pendiente |
+| 3a | Encender banda base y radio, acceso a registros RF (rtw8852b_common.c) | COMPILA en CI |
+| 3b | Tablas de BB/RF y calibraciones (rtw8852b_table.c, rfk) | pendiente |
 | 4 | Pila 802.11: scan, auth, assoc, cifrado WPA2/3. Se reutiliza la de itlwm (net80211 de OpenBSD portada) | pendiente, la mayor parte del trabajo |
 | 5 | Integracion con IO80211Family de Apple para que aparezca en Ajustes > Wi-Fi | pendiente |
 

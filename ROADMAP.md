@@ -346,7 +346,7 @@ del chip, el resto es configuracion. Sin el, nada mas funciona.
 
 ---
 
-## 5. FASE 3 — Inicializar la radio (PENDIENTE)
+## 5. FASE 3 — Inicializar la radio (EMPEZADA: 3a escrita)
 
 **Fuente:** `phy.c` (266 KB), `rtw8852bt.c`, `rtw8852bt_rfk.c` (140 KB),
 `rtw8852b_table.c` (750 KB de tablas), `rtw8852bt_rfk_table.c`
@@ -354,12 +354,44 @@ del chip, el resto es configuracion. Sin el, nada mas funciona.
 Es la fase con mas volumen de codigo pero la mas mecanica: son tablas de valores que se
 escriben en registros en un orden concreto. Casi no hay logica que reinterpretar.
 
-Orden:
-1. `rtw8852bt_bb_reset`, init del baseband con `rtw8852b_table.c`.
-2. Init de RF con `rtw8852bt_rfk.c`: DACK, ADDCK, IQK, DPK, TSSI. Son calibraciones
-   que el chip necesita para transmitir con potencia correcta.
-3. `rtw89_phy_init_bb_reg` / `rtw89_phy_init_rf_reg`.
+### 5.1 FASE 3a — Encender la radio (ESCRITA Y COMPILA)
+
+`kext/src/RTL8852BT_rf.cpp`. Enciende los bloques de banda base y radio, y deja montado
+el acceso a sus registros.
+
+**Tres espacios de registros distintos.** Confundirlos es el error clasico del port:
+
+| Espacio | Como se accede |
+|---|---|
+| MAC | tal cual en el BAR: `write32(0x0004, ...)` |
+| PHY | desplazado 0x10000: `phyWrite32(0x2344, ...)` |
+| RF | base por camino (0xe000 / 0xf000) y direccion por 4: `rfWrite(0, 0x42, ...)` |
+
+Estan en tres parejas de funciones separadas para no mezclarlos nunca.
+
+**Criterio de aceptacion:**
+
+```
+RTL8852BT: rf: banda base y radio encendidas. SYS_FUNC_EN=0x.. WLRF_CTRL=0x........
+RTL8852BT: rf: termometro camino A=NN camino B=NN (rango 0..63)
+RTL8852BT: FASE 3a lista: la radio esta encendida y responde.
+```
+
+El termometro es la prueba de vida. Son 6 bits, rango 0 a 63. A temperatura ambiente
+tiene que dar un valor intermedio. Si los dos caminos dan 0 o 63 clavados, el bloque no
+esta alimentado, y el codigo falla ahi en vez de seguir creyendo que hay radio.
+
+### 5.2 Lo que falta de la fase 3
+
+1. Init de la banda base con las tablas de `rtw8852b_table.c` (750 KB).
+2. Init de RF con las suyas.
+3. Calibraciones de `rtw8852bt_rfk.c`: DACK, ADDCK, IQK, DPK, TSSI. Son lo que permite
+   transmitir con la potencia correcta.
 4. Ajuste de canal y ancho de banda: `rtw8852bt_set_channel`.
+
+Las tablas son mecanicas pero enormes. Lo sensato no es copiarlas a mano sino escribir
+un generador que las convierta desde la fuente Linux, igual que `verify_regs.py`
+comprueba los registros.
 
 **Criterio de aceptacion:** despues del init, leer el termometro del chip
 (`rtw8852bt_get_thermal`) devuelve un valor plausible (20-60 aproximadamente), no 0 ni 0xFF.
@@ -446,8 +478,9 @@ version de `IO80211Family` correcta para tu macOS (cambia entre Sonoma, Sequoia 
 [HECHO]     Fase 2b  anillos DMA + interrupciones      (pci.c)
 [HECHO]     Fase 2d-1 modo descarga de firmware         (mac.c)
 [HECHO]     Fase 2d-2 enviar el firmware por H2C        (fw.c)   <- hito clave
-[AHORA]     ---- PROBAR en el portatil: la fase 2 esta entera ----
-[SIGUIENTE] Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
+[HECHO]     Fase 3a  encender la radio                 (rtw8852b_common.c)
+[AHORA]     ---- PROBAR en el portatil ----
+[SIGUIENTE] Fase 3b  tablas de BB/RF + calibraciones    (rtw8852b_table.c, rfk)
             Fase 3   init de BB/RF + tablas             (phy.c, rtw8852bt_rfk.c)
             Fase 4   pila 802.11 via itlwm              (hal_rtw89)
             Fase 5   IO80211Family / AirportItlwm
